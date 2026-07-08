@@ -1,0 +1,47 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Local notes and working files
+notes/
+*.docx
+
+# Local data
+data/
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Local tooling
+.claude/
+frontend/dev.cmd
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

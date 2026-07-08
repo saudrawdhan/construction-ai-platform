@@ -1,0 +1,78 @@
+# Production-oriented Compose file. Unlike the root docker-compose.yml (which mounts the source
+# and runs uvicorn with --reload for local development), this builds the image, runs without
+# reload, sets restart policies, and turns debug off. TLS is expected to terminate at a reverse
+# proxy or load balancer in front of the api service.
+#
+# Usage:
+#   docker compose -f deployment/docker-compose.prod.yml --env-file .env up -d --build
+#
+# Provide secrets through .env or the host's secret store: DATABASE_URL, REDIS_URL, JWT_SECRET,
+# LLM_API_KEY. Never bake secrets into the image.
+
+name: construction-ai-prod
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-construction}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-construction_ai}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-construction} -d ${POSTGRES_DB:-construction_ai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: ../backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+    ports:
+      - "8000:8000"
+    volumes:
+      - models:/models
+    # --proxy-headers lets rate limiting and logging see the real client IP behind a TLS proxy.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers
+    restart: unless-stopped
+
+  worker:
+    build: ../backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      # Scheduled jobs run on the mock LLM so recurring automations never consume API quota.
+      LLM_PROVIDER: mock
+    volumes:
+      - models:/models
+    command: arq app.worker.settings.WorkerSettings
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  models:
