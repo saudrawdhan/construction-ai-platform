@@ -1,8 +1,8 @@
 # Demonstration Script
 
-An end-to-end walkthrough of the platform, organized as eight scenarios that together cover the
-operational record, all six AI workflows, the copilot, memory, document ingestion, and governance.
-Estimated duration: 10–12 minutes.
+An end-to-end walkthrough of the platform, organized as nine scenarios that together cover the
+operational record, all six AI workflows, the copilot, memory, document ingestion, governance, and
+running the system as a product on your own data. Estimated duration: 12–15 minutes.
 
 ## Setup
 
@@ -84,17 +84,39 @@ separate ingestion pipeline.
 
 ## 7. Governance and Human Approval
 
-Sign in as `pm@construction-ops.com` and open **Approvals**. A high-risk action appears as a pending
-request — proposed by the AI, not executed. Approve it and review the resulting history entry and the
-notification sent to the requester.
+Run a workflow that recommends a high-risk action — for example **Procurement → Purchase Requests →
+Analyze**, or **Suppliers → Risk**. In the result, choose **Request Approval**: the AI's
+recommendation is sent to the approval queue rather than executed.
+
+Sign in as `pm@construction-ops.com` and open **Approvals**. The request appears as *pending*, showing
+the AI's recommendation as its payload. Approve it, and review the history entry ("requested" →
+"approved"). Note the **bell** in the top bar: the person who requested it now has a notification of
+the outcome.
 
 Sign back in as the executive and open **Audit**. Every AI call made during the walkthrough is logged
 with its workflow, provider, model, and an excerpt of the output.
 
-**Demonstrates:** no high-risk action proceeds without a person, and every AI action is recorded —
-the governance the platform is built around.
+**Demonstrates:** the full human-in-the-loop loop — the AI recommends, a person decides, the requester
+is notified, and every AI action is recorded. No high-risk action proceeds on its own.
 
-## 8. Scheduled Automation (optional)
+## 8. Running It as a Product — Data Entry from an Empty System
+
+Sign in as `admin@construction-ops.com`. Open **Projects** and choose **New Project** to add a record
+through a form; open its detail page to see its own workspace of RFIs, orders, meetings, and reports.
+On any operational page, use the row **Edit** and **Delete** controls to amend or remove a record
+(deletes are foreign-key-safe — a record with dependents is refused with a clear message, not a
+crash). Then choose **Import** on Projects or Suppliers, download the template, and load several rows
+from a CSV or Excel file with a validation preview before anything is saved.
+
+To show the empty-start experience directly, a fresh database populated with
+`scripts.seed_demo_data` — or no seed at all — presents an onboarding dashboard that invites the first
+project instead of showing empty tables.
+
+**Demonstrates:** the platform is not tied to one fixed dataset — a company can adopt it on an empty
+database and enter, import, edit, and remove its own records, with the same permissions and validation
+throughout.
+
+## 9. Scheduled Automation (optional)
 
 From the shell, run the automations in a dry run — the same logic the scheduled worker executes each
 morning:
@@ -111,6 +133,7 @@ a schedule, and always in a mode that uses no API quota.
 
 ## Closing
 
-Every scenario above draws on one integrated system and one real dataset: reading the operational
-record, analyzing it, retaining what was learned, answering questions from evidence, and keeping
-high-risk actions behind a person — the combination the platform is designed to deliver.
+Every scenario above draws on one integrated system — running on the real dataset or on synthetic
+demo data: reading the operational record, analyzing it, retaining what was learned, answering
+questions from evidence, keeping high-risk actions behind a person, and letting a company enter and
+manage its own data — the combination the platform is designed to deliver.

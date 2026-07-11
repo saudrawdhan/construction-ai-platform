@@ -11,9 +11,10 @@ real project data, keeps an organizational memory of what was decided and why, r
 over the operational record, and answers management's questions — with every AI answer tied back to
 the records it came from, and every high-risk action held behind a human approval.
 
-It is built to be run, not just demonstrated: a FastAPI backend, a PostgreSQL/pgvector database
-loaded with real bilingual (English/Arabic) construction data, a Redis-backed job scheduler, and a
-React dashboard covering thirteen operational areas.
+It is built to be run, not just demonstrated: a FastAPI backend, a PostgreSQL/pgvector database that
+loads real bilingual (English/Arabic) construction data — or realistic synthetic demo data on an
+empty install — a Redis-backed job scheduler, and a React dashboard covering fifteen operational
+areas that a company can populate with its own records.
 
 ## What it does
 
@@ -54,6 +55,21 @@ worker runs in mock-LLM mode so recurring jobs never consume API quota.
 
 **Document ingestion.** Upload a PDF, Word, or text file and it is parsed, chunked, embedded, and
 indexed into the same store the copilot and search use, so it becomes retrievable immediately.
+
+**Usable from an empty database.** The platform is not just a viewer of a fixed dataset — a company
+can adopt it and run its own operation:
+
+- **Data entry, edit, and delete** on every operational entity, with role-based permissions and
+  foreign-key-safe deletes.
+- **Bulk import** from CSV or Excel for projects, suppliers, and every child entity, with per-row
+  validation, a dry-run preview, downloadable templates, and human `project_code` → ID resolution.
+- **Synthetic demo data** — `scripts/seed_demo_data.py` populates an empty install with a realistic,
+  deterministic fake portfolio, so anyone can clone and run a fully working app with no private
+  dataset.
+- **User management** (admin) with a self-lockout guard, **in-app notifications** (a top-bar bell fed
+  by approval outcomes and the scheduled worker), a **project workspace** that gathers a project's
+  RFIs, orders, meetings, and reports, and an **adaptive dashboard** that onboards a first-time,
+  empty install instead of showing a wall of zeros.
 
 ## Architecture at a glance
 
@@ -116,9 +132,17 @@ docker compose run --rm api alembic upgrade head
 `GET http://localhost:8000/health` returns `{"status": "ok"}` once the API can reach both Postgres
 and Redis. Interactive API docs are at `http://localhost:8000/docs`.
 
-The demonstration dataset is real construction data and is not included in this repository. The
-migrations above create the full schema; with a dataset present under `data/`, the loader scripts
-populate it:
+The migrations above create the full schema. To populate it you have two options.
+
+**Option A — synthetic demo data (no private dataset needed).** One command fills an empty install
+with a realistic fake portfolio and the seven role accounts:
+
+```bash
+docker compose run --rm api python -m scripts.seed_demo_data       # deterministic demo portfolio
+```
+
+**Option B — the real dataset.** The demonstration dataset is real construction data and is not
+included in this repository. With a dataset present under `data/`, the loader scripts populate it:
 
 ```bash
 docker compose run --rm api python -m scripts.import_dataset       # ETL from the source dump
@@ -126,6 +150,9 @@ docker compose run --rm api python -m scripts.seed_supplemental    # RFIs + plan
 docker compose run --rm api python -m scripts.seed_users           # the seven role accounts
 docker compose run --rm api python -m scripts.ingest_documents     # embed the document corpus
 ```
+
+For a fresh empty install with no seed at all, `scripts.create_admin` (reading `ADMIN_EMAIL` /
+`ADMIN_PASSWORD`) bootstraps the first administrator so you can sign in and enter data through the UI.
 
 ### Frontend
 
@@ -152,7 +179,7 @@ All accounts use the password `Passw0rd!`.
 ## Testing and quality
 
 ```bash
-docker compose run --rm -e TESTING=1 api pytest -q   # 106 tests, offline, deterministic
+docker compose run --rm -e TESTING=1 api pytest -q   # 163 tests, offline, deterministic
 docker compose run --rm api ruff check app scripts tests
 ```
 
@@ -180,7 +207,7 @@ construction-ai-platform/
 │   ├── tests/
 │   ├── Dockerfile
 │   └── pyproject.toml
-├── frontend/                  # React + TypeScript dashboard (13 pages)
+├── frontend/                  # React + TypeScript dashboard (15 areas)
 ├── docs/                      # ARCHITECTURE, SECURITY, DEMO
 ├── docker-compose.yml
 └── README.md

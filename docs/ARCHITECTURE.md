@@ -148,10 +148,12 @@ provider forced to mock, so a job that fires every morning never spends API quot
 
 The frontend is a React + TypeScript SPA built with Vite and styled with Tailwind. A small typed API
 client holds the JWT and centralizes error handling; a set of UI primitives (cards, tables, badges,
-modals, tabs, pagination) keeps every page consistent. Thirteen pages cover the dashboard, projects,
-procurement, RFIs, claims, meetings, site reports, documents, reports, copilot, approvals, memory,
-and audit. Role-based visibility is enforced in the UI (action buttons appear only for roles that can
-use them) on top of the server-side RBAC, which remains the actual authority.
+modals, tabs, pagination) keeps every page consistent. Fifteen pages cover the dashboard, projects,
+procurement, RFIs, claims, change orders, meetings, site reports, documents, reports, copilot,
+approvals, memory, audit, and user management, with create/edit/delete forms, CSV/Excel import, an
+in-app notifications bell, and a per-project workspace layered across them. Role-based visibility is
+enforced in the UI (action buttons appear only for roles that can use them) on top of the server-side
+RBAC, which remains the actual authority.
 
 ## Testing strategy
 
