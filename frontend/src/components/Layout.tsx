@@ -5,6 +5,7 @@ import {
   ShoppingCart,
   FileQuestion,
   Scale,
+  FileDiff,
   CalendarCheck,
   ClipboardList,
   FolderSearch,
@@ -13,10 +14,13 @@ import {
   ShieldCheck,
   BrainCircuit,
   ScrollText,
+  UsersRound,
   HardHat,
   LogOut,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import { roleLabel } from "../lib/format";
+import NotificationsBell from "./NotificationsBell";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -24,6 +28,7 @@ const nav = [
   { to: "/procurement", label: "Procurement", icon: ShoppingCart },
   { to: "/rfis", label: "RFIs", icon: FileQuestion },
   { to: "/claims", label: "Claims", icon: Scale },
+  { to: "/change-orders", label: "Change Orders", icon: FileDiff },
   { to: "/meetings", label: "Meetings", icon: CalendarCheck },
   { to: "/site-reports", label: "Site Reports", icon: ClipboardList },
   { to: "/documents", label: "Documents", icon: FolderSearch },
@@ -32,10 +37,12 @@ const nav = [
   { to: "/approvals", label: "Approvals", icon: ShieldCheck },
   { to: "/memory", label: "Memory", icon: BrainCircuit },
   { to: "/audit", label: "Audit", icon: ScrollText },
+  { to: "/users", label: "Users", icon: UsersRound, adminOnly: true },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const items = nav.filter((item) => !item.adminOnly || user?.role === "admin");
   return (
     <div className="flex h-full">
       <aside className="flex w-64 flex-col border-r border-slate-200 bg-white">
@@ -49,7 +56,7 @@ export default function Layout() {
           </div>
         </div>
         <nav className="flex-1 space-y-1 px-3 py-2">
-          {nav.map(({ to, label, icon: Icon, end }) => (
+          {items.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -73,9 +80,10 @@ export default function Layout() {
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
           <div className="text-sm text-slate-500">AI-Powered Construction Operations Platform</div>
           <div className="flex items-center gap-4">
+            <NotificationsBell />
             <div className="text-right">
               <div className="text-sm font-medium text-slate-900">{user?.full_name}</div>
-              <div className="text-xs capitalize text-slate-500">{user?.role?.replace("_", " ")}</div>
+              <div className="text-xs text-slate-500">{user ? roleLabel(user.role) : ""}</div>
             </div>
             <button
               onClick={logout}

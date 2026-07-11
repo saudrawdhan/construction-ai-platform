@@ -22,3 +22,17 @@ export function dateTime(value: string | null | undefined): string {
 export function titleCase(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Administrator",
+  executive: "Executive",
+  project_manager: "Project Manager",
+  site_engineer: "Site Engineer",
+  procurement_officer: "Procurement Officer",
+  qa_qc: "QA / QC",
+  viewer: "Viewer",
+};
+
+export function roleLabel(role: string): string {
+  return ROLE_LABELS[role] ?? titleCase(role);
+}

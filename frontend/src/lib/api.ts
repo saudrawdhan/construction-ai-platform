@@ -77,6 +77,25 @@ export const api = {
   me: () => request<User>("GET", "/auth/me"),
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
+  del: <T>(path: string) => request<T>("DELETE", path),
+  async download(path: string, filename: string): Promise<void> {
+    const res = await fetch(`${BASE}${path}`, { credentials: "include" });
+    if (res.status === 401) {
+      notifySessionEnded();
+      throw new ApiError(401, "Session expired. Please sign in again.");
+    }
+    if (!res.ok) throw new ApiError(res.status, await readError(res, "Download failed"));
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  },
   async upload<T>(path: string, form: FormData): Promise<T> {
     const res = await fetch(`${BASE}${path}`, { method: "POST", credentials: "include", body: form });
     if (res.status === 401) {
