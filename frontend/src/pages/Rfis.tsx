@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Siren } from "lucide-react";
+import { Siren, Plus, Upload } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { date } from "../lib/format";
@@ -20,6 +20,36 @@ import {
   Table,
   statusTone,
 } from "../components/ui";
+import CreateModal from "../components/CreateModal";
+import ImportModal from "../components/ImportModal";
+import RowActions from "../components/RowActions";
+import RequestApprovalButton from "../components/RequestApprovalButton";
+
+const RFI_FIELDS = [
+  { name: "project_id", label: "Project", type: "project" as const, required: true },
+  { name: "rfi_number", label: "RFI number", required: true },
+  { name: "subject", label: "Subject", required: true, full: true },
+  { name: "question", label: "Question", type: "textarea" as const, required: true },
+  { name: "discipline", label: "Discipline", required: true },
+  {
+    name: "priority",
+    label: "Priority",
+    type: "select" as const,
+    options: ["Low", "Medium", "High", "Critical"],
+    initial: "Medium",
+  },
+  {
+    name: "status",
+    label: "Status",
+    type: "select" as const,
+    options: ["Open", "In Review", "Answered", "Closed"],
+    initial: "Open",
+  },
+  { name: "raised_by", label: "Raised by", required: true },
+  { name: "assigned_to", label: "Assigned to", required: true },
+  { name: "raised_date", label: "Raised date", type: "date" as const },
+  { name: "required_date", label: "Required date", type: "date" as const },
+];
 
 interface Rfi {
   id: number;
@@ -65,6 +95,9 @@ export default function Rfis() {
   const [projectId, setProjectId] = useState("");
   const [escalation, setEscalation] = useState<Escalation>();
   const [busy, setBusy] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
     api.get<Page<ProjectOption>>("/projects?size=100").then((p) => setProjects(p.items)).catch(() => {});
@@ -76,7 +109,7 @@ export default function Rfis() {
     if (projectId) params.set("project_id", projectId);
     setError(undefined);
     api.get<Page<Rfi>>(`/rfis?${params}`).then(setData).catch((e) => setError(e.message));
-  }, [page, overdue, projectId]);
+  }, [page, overdue, projectId, refresh]);
 
   async function analyze() {
     if (!projectId) return;
@@ -92,7 +125,19 @@ export default function Rfis() {
 
   return (
     <div>
-      <PageHeader title="RFIs" subtitle="Requests for Information and overdue escalation" />
+      <div className="flex items-start justify-between">
+        <PageHeader title="RFIs" subtitle="Requests for Information and overdue escalation" />
+        {canAnalyze && (
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setShowImport(true)}>
+              <Upload size={16} /> Import
+            </Button>
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus size={16} /> New RFI
+            </Button>
+          </div>
+        )}
+      </div>
 
       <FilterBar>
         <Field label="Project">
@@ -135,7 +180,7 @@ export default function Rfis() {
 
       {data && (
         <Card>
-          <Table head={["RFI", "Subject", "Discipline", "Assigned", "Due", "Status", "Priority"]}>
+          <Table head={["RFI", "Subject", "Discipline", "Assigned", "Due", "Status", "Priority", ""]}>
             {data.items.map((r) => (
               <tr key={r.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.rfi_number}</td>
@@ -148,6 +193,16 @@ export default function Rfis() {
                 </td>
                 <td className="px-4 py-3">
                   <Badge tone={statusTone(r.priority)}>{r.priority}</Badge>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <RowActions
+                    record={r}
+                    entityLabel="RFI"
+                    endpoint="/rfis"
+                    fields={RFI_FIELDS}
+                    canManage={canAnalyze}
+                    onChanged={() => setRefresh((n) => n + 1)}
+                  />
                 </td>
               </tr>
             ))}
@@ -165,6 +220,17 @@ export default function Rfis() {
               label="Drafted Escalation Message"
               value={<p className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-slate-700">{escalation.escalation_message}</p>}
             />
+            {escalation.overdue_count > 0 && (
+              <RequestApprovalButton
+                actionType="send_rfi_escalation"
+                projectId={escalation.project_id}
+                label="Request Approval to Send"
+                payload={{
+                  overdue_count: escalation.overdue_count,
+                  escalation_message: escalation.escalation_message,
+                }}
+              />
+            )}
             {escalation.items.length > 0 && (
               <div>
                 <div className="mb-2 text-xs font-medium text-slate-500">Overdue Items</div>
@@ -190,6 +256,35 @@ export default function Rfis() {
             )}
           </div>
         </Modal>
+      )}
+
+      {showCreate && (
+        <CreateModal
+          title="New RFI"
+          endpoint="/rfis"
+          fields={RFI_FIELDS}
+          submitLabel="Create RFI"
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            setShowCreate(false);
+            setPage(1);
+            setRefresh((r) => r + 1);
+          }}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          title="Import RFIs"
+          importPath="/rfis/import"
+          templatePath="/rfis/import/template"
+          templateFilename="rfis_template.csv"
+          onClose={() => setShowImport(false)}
+          onImported={() => {
+            setPage(1);
+            setRefresh((r) => r + 1);
+          }}
+        />
       )}
     </div>
   );

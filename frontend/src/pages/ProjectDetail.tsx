@@ -16,9 +16,11 @@ import {
   Select,
   Spinner,
   Table,
+  Tabs,
   Textarea,
   statusTone,
 } from "../components/ui";
+import type { Page } from "../lib/api";
 
 interface Project {
   id: number;
@@ -47,6 +49,42 @@ interface Risk {
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
 const LIKELIHOODS = ["Low", "Medium", "High"];
 
+type WorkspaceTab = "risks" | "rfis" | "orders" | "meetings" | "reports";
+
+/** Fetches a project-scoped list once and renders it, so a project's own RFIs, orders, meetings and
+ * site reports live on its detail page (the project workspace) using the existing filtered endpoints. */
+function RelatedList<T extends { id: number }>({
+  endpoint,
+  head,
+  renderRow,
+  empty,
+}: {
+  endpoint: string;
+  head: string[];
+  renderRow: (item: T) => React.ReactNode;
+  empty: string;
+}) {
+  const [items, setItems] = useState<T[]>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    api
+      .get<Page<T>>(endpoint)
+      .then((p) => setItems(p.items))
+      .catch((e: ApiError) => setError(e.message));
+  }, [endpoint]);
+
+  if (error) return <div className="text-sm text-red-600">{error}</div>;
+  if (!items) return <Spinner />;
+
+  return (
+    <Card>
+      <Table head={head}>{items.map(renderRow)}</Table>
+      {items.length === 0 && <EmptyState message={empty} />}
+    </Card>
+  );
+}
+
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -64,6 +102,7 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<Project>();
   const [risks, setRisks] = useState<Risk[]>();
   const [error, setError] = useState<string>();
+  const [wtab, setWtab] = useState<WorkspaceTab>("risks");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", severity: "Medium", likelihood: "Medium", owner: "" });
   const [saving, setSaving] = useState(false);
@@ -123,6 +162,83 @@ export default function ProjectDetail() {
         </div>
       </Card>
 
+      <Tabs
+        tabs={[
+          { key: "risks", label: "Risk Register" },
+          { key: "rfis", label: "RFIs" },
+          { key: "orders", label: "Purchase Orders" },
+          { key: "meetings", label: "Meetings" },
+          { key: "reports", label: "Site Reports" },
+        ]}
+        active={wtab}
+        onChange={setWtab}
+      />
+
+      {wtab === "rfis" && (
+        <RelatedList<{ id: number; rfi_number: string; subject: string; status: string; priority: string }>
+          endpoint={`/rfis?project_id=${id}&size=100`}
+          head={["RFI", "Subject", "Status", "Priority"]}
+          empty="No RFIs for this project."
+          renderRow={(r) => (
+            <tr key={r.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.rfi_number}</td>
+              <td className="px-4 py-3 text-slate-800">{r.subject}</td>
+              <td className="px-4 py-3"><Badge tone={statusTone(r.status)}>{r.status}</Badge></td>
+              <td className="px-4 py-3"><Badge tone={statusTone(r.priority)}>{r.priority}</Badge></td>
+            </tr>
+          )}
+        />
+      )}
+
+      {wtab === "orders" && (
+        <RelatedList<{ id: number; po_number: string; status: string; is_late: boolean; delay_days: number; promised_delivery: string | null }>
+          endpoint={`/procurement/purchase-orders?project_id=${id}&size=100`}
+          head={["PO", "Promised", "Status", "Delay"]}
+          empty="No purchase orders for this project."
+          renderRow={(o) => (
+            <tr key={o.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-mono text-xs text-slate-500">{o.po_number}</td>
+              <td className="px-4 py-3 text-slate-600">{date(o.promised_delivery)}</td>
+              <td className="px-4 py-3"><Badge tone={statusTone(o.status)}>{o.status}</Badge></td>
+              <td className="px-4 py-3">
+                {o.is_late ? <span className="font-medium text-red-600">{o.delay_days}d late</span> : <span className="text-emerald-600">On time</span>}
+              </td>
+            </tr>
+          )}
+        />
+      )}
+
+      {wtab === "meetings" && (
+        <RelatedList<{ id: number; title: string; meeting_type: string; meeting_date: string | null }>
+          endpoint={`/meetings?project_id=${id}&size=100`}
+          head={["Title", "Type", "Date"]}
+          empty="No meetings for this project."
+          renderRow={(m) => (
+            <tr key={m.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-medium text-slate-800">{m.title}</td>
+              <td className="px-4 py-3"><Badge tone="slate">{m.meeting_type}</Badge></td>
+              <td className="px-4 py-3 text-slate-600">{date(m.meeting_date)}</td>
+            </tr>
+          )}
+        />
+      )}
+
+      {wtab === "reports" && (
+        <RelatedList<{ id: number; report_date: string | null; weather: string; summary: string }>
+          endpoint={`/site-reports?project_id=${id}&size=100`}
+          head={["Date", "Weather", "Summary"]}
+          empty="No site reports for this project."
+          renderRow={(s) => (
+            <tr key={s.id} className="hover:bg-slate-50">
+              <td className="whitespace-nowrap px-4 py-3 text-slate-600">{date(s.report_date)}</td>
+              <td className="px-4 py-3 text-slate-600">{s.weather}</td>
+              <td className="max-w-md px-4 py-3 text-slate-700"><div className="truncate">{s.summary}</div></td>
+            </tr>
+          )}
+        />
+      )}
+
+      {wtab === "risks" && (
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">Risk Register</h2>
         {canEdit && (
@@ -131,8 +247,9 @@ export default function ProjectDetail() {
           </Button>
         )}
       </div>
+      )}
 
-      {showForm && canEdit && (
+      {wtab === "risks" && showForm && canEdit && (
         <Card className="mb-4 p-5">
           <form onSubmit={submitRisk} className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
@@ -180,6 +297,7 @@ export default function ProjectDetail() {
         </Card>
       )}
 
+      {wtab === "risks" && (
       <Card>
         <Table head={["Title", "Severity", "Likelihood", "Status", "Owner", "Raised"]}>
           {risks.map((r) => (
@@ -202,6 +320,7 @@ export default function ProjectDetail() {
         </Table>
         {risks.length === 0 && <EmptyState message="No risks recorded for this project yet." />}
       </Card>
+      )}
     </div>
   );
 }

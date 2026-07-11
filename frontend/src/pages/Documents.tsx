@@ -11,6 +11,8 @@ import {
   Field,
   FilterBar,
   Input,
+  LabelValue,
+  Modal,
   PageHeader,
   Pagination,
   Select,
@@ -48,7 +50,19 @@ interface UploadResult {
   embedding_provider: string;
 }
 
-type Tab = "search" | "upload" | "browse";
+interface GeneratedDocument {
+  id: number;
+  file_name: string;
+  type: string;
+  project_id: number;
+  document_date: string | null;
+  sender: string | null;
+  recipient: string | null;
+  subject: string;
+  body: string;
+}
+
+type Tab = "search" | "upload" | "browse" | "generated";
 
 export default function Documents() {
   const { user } = useAuth();
@@ -64,6 +78,7 @@ export default function Documents() {
     { key: "search", label: "Semantic Search" },
     ...(canUpload ? [{ key: "upload" as Tab, label: "Upload" }] : []),
     { key: "browse", label: "Browse" },
+    { key: "generated", label: "Generated" },
   ];
 
   return (
@@ -73,7 +88,92 @@ export default function Documents() {
       {tab === "search" && <SearchTab projects={projects} />}
       {tab === "upload" && canUpload && <UploadTab projects={projects} />}
       {tab === "browse" && <BrowseTab projects={projects} />}
+      {tab === "generated" && <GeneratedTab projects={projects} />}
     </div>
+  );
+}
+
+const GENERATED_TYPES = ["email", "site_report", "meeting_minutes", "claim_thread"];
+
+function GeneratedTab({ projects }: { projects: ProjectOption[] }) {
+  const [data, setData] = useState<Page<GeneratedDocument>>();
+  const [error, setError] = useState<string>();
+  const [page, setPage] = useState(1);
+  const [docType, setDocType] = useState("");
+  const [selected, setSelected] = useState<GeneratedDocument>();
+
+  const projectName = (id: number) => projects.find((p) => p.id === id)?.project_name ?? `#${id}`;
+
+  useEffect(() => {
+    const params = new URLSearchParams({ page: String(page), size: "20" });
+    if (docType) params.set("doc_type", docType);
+    setError(undefined);
+    api.get<Page<GeneratedDocument>>(`/documents/generated?${params}`).then(setData).catch((e) => setError(e.message));
+  }, [page, docType]);
+
+  if (!data && error) return <div className="text-sm text-red-600">{error}</div>;
+  if (!data) return <Spinner />;
+
+  return (
+    <>
+      <FilterBar>
+        <Field label="Type">
+          <Select
+            value={docType}
+            onChange={(e) => {
+              setDocType(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All types</option>
+            {GENERATED_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t.replace("_", " ")}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </FilterBar>
+      <Card>
+        <Table head={["Subject", "Type", "Project", "Date"]}>
+          {data.items.map((d) => (
+            <tr key={d.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3">
+                <button
+                  onClick={() => setSelected(d)}
+                  className="max-w-xl truncate text-left font-medium text-slate-800 hover:text-blue-700 hover:underline"
+                >
+                  {d.subject}
+                </button>
+              </td>
+              <td className="px-4 py-3">
+                <Badge tone="slate">{d.type.replace("_", " ")}</Badge>
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-600">{projectName(d.project_id)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-600">{date(d.document_date)}</td>
+            </tr>
+          ))}
+        </Table>
+        {data.items.length === 0 && <EmptyState message="No generated documents match this filter." />}
+        <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
+      </Card>
+
+      {selected && (
+        <Modal title={selected.subject} onClose={() => setSelected(undefined)}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <LabelValue label="Type" value={selected.type.replace("_", " ")} />
+              <LabelValue label="Date" value={date(selected.document_date)} />
+              {selected.sender && <LabelValue label="From" value={selected.sender} />}
+              {selected.recipient && <LabelValue label="To" value={selected.recipient} />}
+            </div>
+            <div className="whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm text-slate-700">
+              {selected.body}
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 

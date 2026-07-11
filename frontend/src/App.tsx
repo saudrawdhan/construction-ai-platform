@@ -8,6 +8,7 @@ import ProjectDetail from "./pages/ProjectDetail";
 import Procurement from "./pages/Procurement";
 import Rfis from "./pages/Rfis";
 import Claims from "./pages/Claims";
+import ChangeOrders from "./pages/ChangeOrders";
 import Documents from "./pages/Documents";
 import Meetings from "./pages/Meetings";
 import SiteReports from "./pages/SiteReports";
@@ -16,6 +17,7 @@ import Copilot from "./pages/Copilot";
 import Approvals from "./pages/Approvals";
 import Memory from "./pages/Memory";
 import Audit from "./pages/Audit";
+import Users from "./pages/Users";
 import { Spinner } from "./components/ui";
 
 function Protected() {
@@ -50,6 +52,7 @@ export default function App() {
             <Route path="/procurement" element={<Procurement />} />
             <Route path="/rfis" element={<Rfis />} />
             <Route path="/claims" element={<Claims />} />
+            <Route path="/change-orders" element={<ChangeOrders />} />
             <Route path="/meetings" element={<Meetings />} />
             <Route path="/site-reports" element={<SiteReports />} />
             <Route path="/documents" element={<Documents />} />
@@ -58,6 +61,7 @@ export default function App() {
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/memory" element={<Memory />} />
             <Route path="/audit" element={<Audit />} />
+            <Route path="/users" element={<Users />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { FileText, GitBranch, Landmark, Mail, Link2 } from "lucide-react";
+import { FileText, GitBranch, Landmark, Mail, Link2, Plus, Upload } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { date, money } from "../lib/format";
 import {
   Badge,
@@ -14,6 +15,30 @@ import {
   Table,
   statusTone,
 } from "../components/ui";
+import CreateModal from "../components/CreateModal";
+import ImportModal from "../components/ImportModal";
+import RowActions from "../components/RowActions";
+
+const CLAIM_FIELDS = [
+  { name: "project_id", label: "Project", type: "project" as const, required: true },
+  { name: "claim_number", label: "Claim number", required: true },
+  {
+    name: "claim_type",
+    label: "Type",
+    type: "select" as const,
+    options: ["Cost", "EOT", "Acceleration", "Variation"],
+    initial: "Cost",
+  },
+  {
+    name: "status",
+    label: "Status",
+    type: "select" as const,
+    options: ["Submitted", "Under Review", "Approved", "Rejected"],
+    initial: "Submitted",
+  },
+  { name: "amount", label: "Amount (SAR)", type: "number" as const, required: true },
+  { name: "narrative", label: "Narrative", type: "textarea" as const, required: true },
+];
 
 interface Claim {
   id: number;
@@ -94,16 +119,21 @@ function EvidenceRow({ item }: { item: EvidenceItem }) {
 }
 
 export default function Claims() {
+  const { user } = useAuth();
+  const canManage = !!user && ["admin", "project_manager"].includes(user.role);
   const [data, setData] = useState<Page<Claim>>();
   const [error, setError] = useState<string>();
   const [page, setPage] = useState(1);
   const [chain, setChain] = useState<EvidenceChain>();
   const [busy, setBusy] = useState<number>();
+  const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
     setError(undefined);
     api.get<Page<Claim>>(`/claims?page=${page}&size=20`).then(setData).catch((e) => setError(e.message));
-  }, [page]);
+  }, [page, refresh]);
 
   async function openEvidence(claim: Claim) {
     setBusy(claim.id);
@@ -118,14 +148,26 @@ export default function Claims() {
 
   return (
     <div>
-      <PageHeader title="Claims" subtitle="Commercial claims and their supporting evidence chain" />
+      <div className="flex items-start justify-between">
+        <PageHeader title="Claims" subtitle="Commercial claims and their supporting evidence chain" />
+        {canManage && (
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setShowImport(true)}>
+              <Upload size={16} /> Import
+            </Button>
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus size={16} /> New Claim
+            </Button>
+          </div>
+        )}
+      </div>
 
       {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
       {!data && !error && <Spinner />}
 
       {data && (
         <Card>
-          <Table head={["Claim", "Type", "Amount", "Status", "Evidence"]}>
+          <Table head={["Claim", "Type", "Amount", "Status", "Evidence", ""]}>
             {data.items.map((c) => (
               <tr key={c.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{c.claim_number}</td>
@@ -138,6 +180,16 @@ export default function Claims() {
                   <Button variant="secondary" disabled={busy === c.id} onClick={() => openEvidence(c)}>
                     <Link2 size={14} /> View Chain
                   </Button>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <RowActions
+                    record={c}
+                    entityLabel="Claim"
+                    endpoint="/claims"
+                    fields={CLAIM_FIELDS}
+                    canManage={canManage}
+                    onChanged={() => setRefresh((n) => n + 1)}
+                  />
                 </td>
               </tr>
             ))}
@@ -166,6 +218,35 @@ export default function Claims() {
             {chain.evidence.length === 0 && <EmptyState message="No linked evidence found." />}
           </div>
         </Modal>
+      )}
+
+      {showCreate && (
+        <CreateModal
+          title="New Claim"
+          endpoint="/claims"
+          fields={CLAIM_FIELDS}
+          submitLabel="Create Claim"
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            setShowCreate(false);
+            setPage(1);
+            setRefresh((r) => r + 1);
+          }}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          title="Import Claims"
+          importPath="/claims/import"
+          templatePath="/claims/import/template"
+          templateFilename="claims_template.csv"
+          onClose={() => setShowImport(false)}
+          onImported={() => {
+            setPage(1);
+            setRefresh((r) => r + 1);
+          }}
+        />
       )}
     </div>
   );

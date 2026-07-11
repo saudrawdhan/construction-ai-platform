@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search, Sparkles } from "lucide-react";
+import { Search, Sparkles, Plus } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { dateTime, titleCase } from "../lib/format";
@@ -19,6 +19,7 @@ import {
   Tabs,
   Textarea,
 } from "../components/ui";
+import CreateModal from "../components/CreateModal";
 
 interface Memory {
   id: number;
@@ -41,6 +42,15 @@ const CATEGORIES = [
   "procurement_blocker",
   "safety_event",
   "client_instruction",
+];
+
+const MEMORY_FIELDS = [
+  { name: "category", label: "Category", type: "select" as const, options: CATEGORIES, initial: "decision" },
+  { name: "summary", label: "Summary", required: true, full: true },
+  { name: "detail", label: "Detail", type: "textarea" as const },
+  { name: "project_id", label: "Project (optional)", type: "project" as const },
+  { name: "source_type", label: "Source type (optional)", type: "text" as const },
+  { name: "confidence", label: "Confidence 0–1 (optional)", type: "number" as const },
 ];
 
 const categoryTone: Record<string, "red" | "amber" | "blue" | "green" | "slate"> = {
@@ -100,17 +110,21 @@ export default function Memory() {
 }
 
 function Browse() {
+  const { user } = useAuth();
+  const canManage = !!user && user.role !== "viewer";
   const [data, setData] = useState<Page<Memory>>();
   const [error, setError] = useState<string>();
   const [page, setPage] = useState(1);
   const [category, setCategory] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
     const params = new URLSearchParams({ page: String(page), size: "20" });
     if (category) params.set("category", category);
     setError(undefined);
     api.get<Page<Memory>>(`/memory?${params}`).then(setData).catch((e) => setError(e.message));
-  }, [page, category]);
+  }, [page, category, refresh]);
 
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!data) return <Spinner />;
@@ -134,6 +148,11 @@ function Browse() {
             ))}
           </Select>
         </Field>
+        {canManage && (
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus size={16} /> New Memory
+          </Button>
+        )}
       </FilterBar>
       {data.items.length === 0 ? (
         <Card>
@@ -147,6 +166,21 @@ function Browse() {
         </div>
       )}
       <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
+
+      {showCreate && (
+        <CreateModal
+          title="New Memory"
+          endpoint="/memory/create"
+          fields={MEMORY_FIELDS}
+          submitLabel="Save Memory"
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            setShowCreate(false);
+            setPage(1);
+            setRefresh((r) => r + 1);
+          }}
+        />
+      )}
     </>
   );
 }

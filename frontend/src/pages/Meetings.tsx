@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { Sparkles, ListChecks } from "lucide-react";
+import { Sparkles, ListChecks, Plus, Upload } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
+import CreateModal from "../components/CreateModal";
+import ImportModal from "../components/ImportModal";
+import RowActions from "../components/RowActions";
 import { useAuth } from "../lib/auth";
 import { date } from "../lib/format";
 import {
@@ -20,6 +23,7 @@ import {
   Spinner,
   Table,
   Textarea,
+  statusTone,
 } from "../components/ui";
 
 interface Meeting {
@@ -56,6 +60,27 @@ interface MeetingSummary {
 
 const MEETING_TYPES = ["General", "Technical Coordination", "Safety Review", "Progress Review", "Client Meeting"];
 
+const MEETING_FIELDS = [
+  { name: "project_id", label: "Project", type: "project" as const, required: true },
+  { name: "title", label: "Title", required: true, full: true },
+  { name: "meeting_type", label: "Type", type: "select" as const, options: MEETING_TYPES, initial: "General" },
+  { name: "meeting_date", label: "Date", type: "date" as const },
+];
+
+interface ActionItemRow {
+  id: number;
+  description: string;
+  owner: string | null;
+  due_date: string | null;
+  status: string;
+}
+interface DecisionRow {
+  id: number;
+  decision_text: string;
+  owner: string;
+  decision_date: string | null;
+}
+
 export default function Meetings() {
   const { user } = useAuth();
   const canSummarize = !!user && ["admin", "project_manager", "qa_qc"].includes(user.role);
@@ -65,6 +90,22 @@ export default function Meetings() {
   const [page, setPage] = useState(1);
   const [projectFilter, setProjectFilter] = useState("");
   const [open, setOpen] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [detail, setDetail] = useState<{ meeting: Meeting; actions: ActionItemRow[]; decisions: DecisionRow[] }>();
+  const [refresh, setRefresh] = useState(0);
+
+  async function openDetail(m: Meeting) {
+    try {
+      const [actions, decisions] = await Promise.all([
+        api.get<ActionItemRow[]>(`/meetings/${m.id}/action-items`),
+        api.get<DecisionRow[]>(`/meetings/${m.id}/decisions`),
+      ]);
+      setDetail({ meeting: m, actions, decisions });
+    } catch (e) {
+      setError((e as ApiError).message);
+    }
+  }
 
   useEffect(() => {
     api.get<Page<ProjectOption>>("/projects?size=100").then((p) => setProjects(p.items)).catch(() => {});
@@ -75,7 +116,7 @@ export default function Meetings() {
     if (projectFilter) params.set("project_id", projectFilter);
     setError(undefined);
     api.get<Page<Meeting>>(`/meetings?${params}`).then(setData).catch((e) => setError(e.message));
-  }, [page, projectFilter]);
+  }, [page, projectFilter, refresh]);
 
   const projectName = (id: number) => projects.find((p) => p.id === id)?.project_name ?? `#${id}`;
 
@@ -103,9 +144,17 @@ export default function Meetings() {
           </Field>
         </FilterBar>
         {canSummarize && (
-          <Button onClick={() => setOpen(true)}>
-            <Sparkles size={15} /> Summarize Notes
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setShowImport(true)}>
+              <Upload size={15} /> Import
+            </Button>
+            <Button variant="secondary" onClick={() => setShowCreate(true)}>
+              <Plus size={15} /> New Meeting
+            </Button>
+            <Button onClick={() => setOpen(true)}>
+              <Sparkles size={15} /> Summarize Notes
+            </Button>
+          </div>
         )}
       </div>
 
@@ -114,15 +163,32 @@ export default function Meetings() {
 
       {data && (
         <Card>
-          <Table head={["Title", "Type", "Project", "Date"]}>
+          <Table head={["Title", "Type", "Project", "Date", ""]}>
             {data.items.map((m) => (
               <tr key={m.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium text-slate-800">{m.title}</td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => openDetail(m)}
+                    className="text-left font-medium text-slate-800 hover:text-blue-700 hover:underline"
+                  >
+                    {m.title}
+                  </button>
+                </td>
                 <td className="px-4 py-3">
                   <Badge tone="slate">{m.meeting_type}</Badge>
                 </td>
                 <td className="px-4 py-3 text-slate-600">{projectName(m.project_id)}</td>
                 <td className="px-4 py-3 text-slate-600">{date(m.meeting_date)}</td>
+                <td className="px-4 py-3 text-right">
+                  <RowActions
+                    record={m}
+                    entityLabel="Meeting"
+                    endpoint="/meetings"
+                    fields={MEETING_FIELDS}
+                    canManage={canSummarize}
+                    onChanged={() => setRefresh((n) => n + 1)}
+                  />
+                </td>
               </tr>
             ))}
           </Table>
@@ -131,7 +197,95 @@ export default function Meetings() {
         </Card>
       )}
 
+      {detail && (
+        <Modal title={detail.meeting.title} onClose={() => setDetail(undefined)}>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Badge tone="slate">{detail.meeting.meeting_type}</Badge>
+              <span>{projectName(detail.meeting.project_id)}</span>
+              <span>·</span>
+              <span>{date(detail.meeting.meeting_date)}</span>
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                <ListChecks size={13} /> Action Items ({detail.actions.length})
+              </div>
+              {detail.actions.length === 0 ? (
+                <p className="text-sm text-slate-400">No action items recorded for this meeting.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {detail.actions.map((a) => (
+                    <div key={a.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-700">{a.description}</span>
+                        <Badge tone={statusTone(a.status)}>{a.status}</Badge>
+                      </div>
+                      {(a.owner || a.due_date) && (
+                        <div className="mt-0.5 text-xs text-slate-400">
+                          {a.owner ?? "unassigned"}
+                          {a.due_date ? ` · due ${date(a.due_date)}` : ""}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs font-medium text-slate-500">Decisions ({detail.decisions.length})</div>
+              {detail.decisions.length === 0 ? (
+                <p className="text-sm text-slate-400">No decisions recorded for this meeting.</p>
+              ) : (
+                <ul className="list-inside list-disc space-y-1 text-sm text-slate-700">
+                  {detail.decisions.map((d) => (
+                    <li key={d.id}>
+                      {d.decision_text}
+                      <span className="text-xs text-slate-400">
+                        {" "}
+                        — {d.owner}
+                        {d.decision_date ? ` · ${date(d.decision_date)}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {open && <SummarizeModal projects={projects} onClose={() => setOpen(false)} />}
+
+      {showCreate && (
+        <CreateModal
+          title="New Meeting"
+          endpoint="/meetings"
+          fields={MEETING_FIELDS}
+          submitLabel="Create Meeting"
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            setShowCreate(false);
+            setPage(1);
+            setRefresh((r) => r + 1);
+          }}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          title="Import Meetings"
+          importPath="/meetings/import"
+          templatePath="/meetings/import/template"
+          templateFilename="meetings_template.csv"
+          onClose={() => setShowImport(false)}
+          onImported={() => {
+            setPage(1);
+            setRefresh((r) => r + 1);
+          }}
+        />
+      )}
     </div>
   );
 }
