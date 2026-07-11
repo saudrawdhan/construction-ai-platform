@@ -1,6 +1,20 @@
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class SupplierCreate(BaseModel):
+    supplier_name: str = Field(min_length=1, max_length=255)
+    category: str = Field(min_length=1, max_length=100)
+    city: str = Field(min_length=1, max_length=100)
+    status: str = "Active"
+
+
+class SupplierUpdate(BaseModel):
+    supplier_name: str | None = Field(default=None, min_length=1, max_length=255)
+    category: str | None = Field(default=None, min_length=1, max_length=100)
+    city: str | None = Field(default=None, min_length=1, max_length=100)
+    status: str | None = None
 
 
 class SupplierRead(BaseModel):
@@ -28,6 +42,44 @@ class SupplierPerformance(BaseModel):
     average_delay_days_when_late: float
     ncr_count: int
     top_delay_causes: list[DelayCause]
+
+
+class PurchaseRequestCreate(BaseModel):
+    project_id: int
+    request_no: str = Field(min_length=1, max_length=50)
+    material_category: str | None = None
+    specification: str | None = None
+    required_delivery_date: date | None = None
+    status: str = "Under Review"
+
+
+class PurchaseRequestUpdate(BaseModel):
+    request_no: str | None = Field(default=None, min_length=1, max_length=50)
+    material_category: str | None = None
+    specification: str | None = None
+    required_delivery_date: date | None = None
+    status: str | None = None
+
+
+class PurchaseOrderCreate(BaseModel):
+    pr_id: int
+    project_id: int
+    supplier_id: int
+    po_number: str = Field(min_length=1, max_length=50)
+    issue_date: date | None = None
+    promised_delivery: date | None = None
+    actual_delivery: date | None = None
+    status: str = "Issued"
+    delay_root_cause: str | None = None
+
+
+class PurchaseOrderUpdate(BaseModel):
+    po_number: str | None = Field(default=None, min_length=1, max_length=50)
+    issue_date: date | None = None
+    promised_delivery: date | None = None
+    actual_delivery: date | None = None
+    status: str | None = None
+    delay_root_cause: str | None = None
 
 
 class PurchaseRequestRead(BaseModel):

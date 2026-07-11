@@ -2,7 +2,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Client, Project, ProjectRisk
-from app.schemas.project import ProjectCreate, ProjectRiskCreate
+from app.schemas.project import ProjectCreate, ProjectRiskCreate, ProjectUpdate
 
 
 async def list_projects(
@@ -44,6 +44,35 @@ async def create_project(db: AsyncSession, data: ProjectCreate) -> Project:
     db.add(project)
     await db.flush()
     return project
+
+
+async def update_project(
+    db: AsyncSession, project_id: int, data: ProjectUpdate
+) -> Project | None:
+    project = await db.get(Project, project_id)
+    if project is None:
+        return None
+    fields = data.model_dump(exclude_unset=True)
+    if "client_name" in fields:
+        client = await db.scalar(select(Client).where(Client.name == fields["client_name"]))
+        if client is None:
+            client = Client(name=fields["client_name"])
+            db.add(client)
+            await db.flush()
+        project.client_id = client.id
+    for field, value in fields.items():
+        setattr(project, field, value)
+    await db.flush()
+    return project
+
+
+async def delete_project(db: AsyncSession, project_id: int) -> bool:
+    project = await db.get(Project, project_id)
+    if project is None:
+        return False
+    await db.delete(project)
+    await db.flush()
+    return True
 
 
 async def list_risks(db: AsyncSession, project_id: int) -> list[ProjectRisk]:

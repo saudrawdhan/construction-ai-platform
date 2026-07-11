@@ -17,12 +17,14 @@ from app.api.v1 import (
     rfis,
     site_reports,
     suppliers,
+    users,
 )
 from app.config import get_settings
 
 api_router = APIRouter(prefix=get_settings().api_v1_prefix)
 
 api_router.include_router(auth.router)
+api_router.include_router(users.router)
 api_router.include_router(projects.router)
 api_router.include_router(suppliers.router)
 api_router.include_router(procurement.router)

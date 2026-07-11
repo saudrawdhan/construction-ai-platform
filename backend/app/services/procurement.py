@@ -1,8 +1,19 @@
+from datetime import date
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Ncr, PurchaseOrder, PurchaseRequest, Supplier
-from app.schemas.procurement import DelayCause, SupplierPerformance
+from app.schemas.procurement import (
+    DelayCause,
+    PurchaseOrderCreate,
+    PurchaseOrderUpdate,
+    PurchaseRequestCreate,
+    PurchaseRequestUpdate,
+    SupplierCreate,
+    SupplierPerformance,
+    SupplierUpdate,
+)
 
 
 async def list_suppliers(
@@ -29,6 +40,34 @@ async def list_suppliers(
 
 async def get_supplier(db: AsyncSession, supplier_id: int) -> Supplier | None:
     return await db.get(Supplier, supplier_id)
+
+
+async def create_supplier(db: AsyncSession, payload: SupplierCreate) -> Supplier:
+    supplier = Supplier(**payload.model_dump())
+    db.add(supplier)
+    await db.flush()
+    return supplier
+
+
+async def update_supplier(
+    db: AsyncSession, supplier_id: int, payload: SupplierUpdate
+) -> Supplier | None:
+    supplier = await db.get(Supplier, supplier_id)
+    if supplier is None:
+        return None
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(supplier, field, value)
+    await db.flush()
+    return supplier
+
+
+async def delete_supplier(db: AsyncSession, supplier_id: int) -> bool:
+    supplier = await db.get(Supplier, supplier_id)
+    if supplier is None:
+        return False
+    await db.delete(supplier)
+    await db.flush()
+    return True
 
 
 async def supplier_performance(
@@ -119,6 +158,76 @@ async def list_purchase_requests(
 
 async def get_purchase_request(db: AsyncSession, pr_id: int) -> PurchaseRequest | None:
     return await db.get(PurchaseRequest, pr_id)
+
+
+async def create_purchase_request(
+    db: AsyncSession, payload: PurchaseRequestCreate
+) -> PurchaseRequest:
+    request = PurchaseRequest(**payload.model_dump(), created_at=date.today())
+    db.add(request)
+    await db.flush()
+    return request
+
+
+async def update_purchase_request(
+    db: AsyncSession, pr_id: int, payload: PurchaseRequestUpdate
+) -> PurchaseRequest | None:
+    request = await db.get(PurchaseRequest, pr_id)
+    if request is None:
+        return None
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(request, field, value)
+    await db.flush()
+    return request
+
+
+async def delete_purchase_request(db: AsyncSession, pr_id: int) -> bool:
+    request = await db.get(PurchaseRequest, pr_id)
+    if request is None:
+        return False
+    await db.delete(request)
+    await db.flush()
+    return True
+
+
+async def create_purchase_order(
+    db: AsyncSession, payload: PurchaseOrderCreate
+) -> PurchaseOrder:
+    data = payload.model_dump()
+    is_late, delay_days = _lateness(data.get("promised_delivery"), data.get("actual_delivery"))
+    order = PurchaseOrder(**data, is_late=is_late, delay_days=delay_days)
+    db.add(order)
+    await db.flush()
+    return order
+
+
+def _lateness(promised: date | None, actual: date | None) -> tuple[bool, int]:
+    if promised and actual and actual > promised:
+        return True, (actual - promised).days
+    return False, 0
+
+
+async def update_purchase_order(
+    db: AsyncSession, po_id: int, payload: PurchaseOrderUpdate
+) -> PurchaseOrder | None:
+    order = await db.get(PurchaseOrder, po_id)
+    if order is None:
+        return None
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(order, field, value)
+    # Lateness is derived, never entered — recompute it from the resulting delivery dates.
+    order.is_late, order.delay_days = _lateness(order.promised_delivery, order.actual_delivery)
+    await db.flush()
+    return order
+
+
+async def delete_purchase_order(db: AsyncSession, po_id: int) -> bool:
+    order = await db.get(PurchaseOrder, po_id)
+    if order is None:
+        return False
+    await db.delete(order)
+    await db.flush()
+    return True
 
 
 async def list_purchase_orders(

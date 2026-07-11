@@ -21,6 +21,19 @@ class ProjectCreate(ProjectBase):
     pass
 
 
+class ProjectUpdate(BaseModel):
+    project_code: str | None = None
+    project_name: str | None = None
+    project_type: str | None = None
+    client_name: str | None = None
+    city: str | None = None
+    start_date: date | None = None
+    planned_finish: date | None = None
+    actual_finish: date | None = None
+    status: str | None = None
+    budget: Decimal | None = None
+
+
 class ProjectRead(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
 

@@ -2,6 +2,35 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Meeting, MeetingActionItem, ProjectDecision
+from app.schemas.meetings import MeetingCreate, MeetingUpdate
+
+
+async def create_meeting(db: AsyncSession, payload: MeetingCreate) -> Meeting:
+    meeting = Meeting(**payload.model_dump())
+    db.add(meeting)
+    await db.flush()
+    return meeting
+
+
+async def update_meeting(
+    db: AsyncSession, meeting_id: int, payload: MeetingUpdate
+) -> Meeting | None:
+    meeting = await db.get(Meeting, meeting_id)
+    if meeting is None:
+        return None
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(meeting, field, value)
+    await db.flush()
+    return meeting
+
+
+async def delete_meeting(db: AsyncSession, meeting_id: int) -> bool:
+    meeting = await db.get(Meeting, meeting_id)
+    if meeting is None:
+        return False
+    await db.delete(meeting)
+    await db.flush()
+    return True
 
 
 async def list_meetings(

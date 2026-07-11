@@ -1,6 +1,19 @@
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class SiteReportCreate(BaseModel):
+    project_id: int
+    weather: str = Field(min_length=1, max_length=50)
+    summary: str = Field(min_length=1)
+    report_date: date | None = None
+
+
+class SiteReportUpdate(BaseModel):
+    weather: str | None = Field(default=None, min_length=1, max_length=50)
+    summary: str | None = Field(default=None, min_length=1)
+    report_date: date | None = None
 
 
 class SiteReportRead(BaseModel):

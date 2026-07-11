@@ -1,7 +1,39 @@
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ChangeOrderCreate(BaseModel):
+    project_id: int
+    co_number: str = Field(min_length=1, max_length=50)
+    description: str = Field(min_length=1)
+    value: Decimal
+    status: str = "Pending"
+
+
+class ChangeOrderUpdate(BaseModel):
+    co_number: str | None = Field(default=None, min_length=1, max_length=50)
+    description: str | None = Field(default=None, min_length=1)
+    value: Decimal | None = None
+    status: str | None = None
+
+
+class ClaimCreate(BaseModel):
+    project_id: int
+    claim_number: str = Field(min_length=1, max_length=50)
+    claim_type: str = Field(min_length=1, max_length=100)
+    amount: Decimal
+    status: str = "Submitted"
+    narrative: str = Field(min_length=1)
+
+
+class ClaimUpdate(BaseModel):
+    claim_number: str | None = Field(default=None, min_length=1, max_length=50)
+    claim_type: str | None = Field(default=None, min_length=1, max_length=100)
+    amount: Decimal | None = None
+    status: str | None = None
+    narrative: str | None = Field(default=None, min_length=1)
 
 
 class ChangeOrderRead(BaseModel):

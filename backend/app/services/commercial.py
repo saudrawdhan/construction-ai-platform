@@ -10,14 +10,72 @@ from app.models import (
     ProjectDecision,
 )
 from app.schemas.commercial import (
+    ChangeOrderCreate,
     ChangeOrderRead,
+    ChangeOrderUpdate,
+    ClaimCreate,
     ClaimEvidenceChain,
     ClaimRead,
+    ClaimUpdate,
     CorrespondenceBrief,
     DecisionBrief,
     DocumentBrief,
     EvidenceItem,
 )
+
+
+async def create_change_order(db: AsyncSession, payload: ChangeOrderCreate) -> ChangeOrder:
+    change_order = ChangeOrder(**payload.model_dump())
+    db.add(change_order)
+    await db.flush()
+    return change_order
+
+
+async def update_change_order(
+    db: AsyncSession, co_id: int, payload: ChangeOrderUpdate
+) -> ChangeOrder | None:
+    change_order = await db.get(ChangeOrder, co_id)
+    if change_order is None:
+        return None
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(change_order, field, value)
+    await db.flush()
+    return change_order
+
+
+async def delete_change_order(db: AsyncSession, co_id: int) -> bool:
+    change_order = await db.get(ChangeOrder, co_id)
+    if change_order is None:
+        return False
+    await db.delete(change_order)
+    await db.flush()
+    return True
+
+
+async def create_claim(db: AsyncSession, payload: ClaimCreate) -> Claim:
+    claim = Claim(**payload.model_dump())
+    db.add(claim)
+    await db.flush()
+    return claim
+
+
+async def update_claim(db: AsyncSession, claim_id: int, payload: ClaimUpdate) -> Claim | None:
+    claim = await db.get(Claim, claim_id)
+    if claim is None:
+        return None
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(claim, field, value)
+    await db.flush()
+    return claim
+
+
+async def delete_claim(db: AsyncSession, claim_id: int) -> bool:
+    claim = await db.get(Claim, claim_id)
+    if claim is None:
+        return False
+    await db.delete(claim)
+    await db.flush()
+    return True
 
 
 async def list_change_orders(
