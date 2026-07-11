@@ -11,13 +11,13 @@ from app.services import users as user_service
 DEV_PASSWORD = "Passw0rd!"
 
 USERS = [
-    ("admin@construction-ops.com", "System Administrator", Role.ADMIN),
-    ("executive@construction-ops.com", "Executive Director", Role.EXECUTIVE),
-    ("pm@construction-ops.com", "Project Manager", Role.PROJECT_MANAGER),
-    ("engineer@construction-ops.com", "Site Engineer", Role.SITE_ENGINEER),
-    ("procurement@construction-ops.com", "Procurement Officer", Role.PROCUREMENT_OFFICER),
-    ("qaqc@construction-ops.com", "QA/QC Manager", Role.QA_QC),
-    ("viewer@construction-ops.com", "Read-Only User", Role.VIEWER),
+    ("admin@construction-ops.com", "Omar Al-Harbi", Role.ADMIN),
+    ("executive@construction-ops.com", "Faisal Al-Rashid", Role.EXECUTIVE),
+    ("pm@construction-ops.com", "Khalid Al-Otaibi", Role.PROJECT_MANAGER),
+    ("engineer@construction-ops.com", "Yousef Ahmed", Role.SITE_ENGINEER),
+    ("procurement@construction-ops.com", "Noura Al-Qahtani", Role.PROCUREMENT_OFFICER),
+    ("qaqc@construction-ops.com", "Sami Haddad", Role.QA_QC),
+    ("viewer@construction-ops.com", "Layla Nasser", Role.VIEWER),
 ]
 
 
