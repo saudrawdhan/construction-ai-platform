@@ -13,7 +13,7 @@ the records it came from, and every high-risk action held behind a human approva
 
 It is built to be run, not just demonstrated: a FastAPI backend, a PostgreSQL/pgvector database that
 loads real bilingual (English/Arabic) construction data — or realistic synthetic demo data on an
-empty install — a Redis-backed job scheduler, and a React dashboard covering fifteen operational
+empty install — a Redis-backed job scheduler, and a React dashboard covering sixteen operational
 areas that a company can populate with its own records.
 
 ## What it does
@@ -45,6 +45,45 @@ text into categorized, confidence-scored memories.
 retrieves evidence first and answers only from it — and when it finds no supporting evidence, it
 says so rather than inventing an answer.
 
+**Autonomous agent.** Given a goal in plain language, the agent plans a sequence of tool calls,
+executes them, and returns a grounded answer alongside its full reasoning trajectory. It is a
+single reasoning layer, not six separate mini-agents: its tool set spans all six AI workflows plus
+retrieval and direct lookups over projects, claims, change orders, and safety events, so the same
+agent that assesses a supplier's risk can also summarize a meeting, analyze a site report, or total
+a project's open claims. A direct question naming one of these read-only lookups is guaranteed to
+call it — the same principle that already guarantees an explicit `remember` instruction fires —
+rather than left to hope, since a live test found the model can otherwise answer confidently from
+memory alone and miss real records entirely, once even reporting no recent safety incidents when a
+real high-severity one was on file. The totals and lists these tools return are relayed to the user
+exactly as computed, never re-summarized by the model: a separate live test found free-text
+narration inventing a different figure for one line item while silently dropping another from its
+own sum, so this class of answer bypasses narration and returns the computed result directly. Every
+run consults enterprise memory first, and a follow-up goal
+stays in the same conversation — a project mentioned in an earlier turn carries forward
+automatically, so "what about its delivery history" resolves against what was actually just
+discussed instead of being planned from nothing. It turns a solved task into a reusable skill — a
+named, parameterized sequence of tool calls, stored as data rather than generated code, that it
+reuses on similar goals and refines from its success rate. Matching a goal to a skill is hybrid:
+exact keyword overlap is tried first, and an embedding-similarity comparison (calibrated against
+real measured scores, not a guessed threshold) catches genuine paraphrases keyword matching alone
+would miss — "how risky is supplier 12" reuses the same skill built from "assess the risk of
+supplier 3." An explicit topic change in the goal itself ("one more thing, unrelated to the
+RFIs...") skips skill matching for that turn, since a live test found a skill's own keyword
+fingerprint can match a phrase that only mentions its topic to say it is unrelated — plain keyword
+overlap cannot tell the two apart. An admin can deprecate or hard-delete a skill directly from the
+Agent page when one misbehaves; a skill with prior run history can only be deprecated, never deleted
+outright, keeping its trajectory in the audit trail. Each tool carries the same role restriction as its direct API
+endpoint, checked on every use, including when a stored skill is replayed by a different user —
+reaching every service never bypasses that service's own governance. Content retrieved from memory,
+documents, or past sessions is treated as data, never as instructions: text that resembles an
+embedded override or an unverified claim about a waived approval is flagged before it ever reaches
+the model, so a poisoned record cannot talk the agent into bad advice the way an unguarded prompt
+would let it. Every step is recorded and auditable, and no external agent framework is used. What
+the agent does not do, deliberately: it does not build a behavioral or personality profile of the
+person asking — it recalls this user's own recent work ahead of the wider organizational record,
+but it has no concept of an individual's traits or preferences, which is the appropriate boundary
+for a shared operational tool used by many employees under one audit trail.
+
 **Governance.** JWT authentication, seven-role RBAC, an audit log written on every AI call, and a
 human-in-the-loop approval workflow: high-risk actions become approval requests that a manager
 approves or rejects, with full history — the AI never executes them on its own.
@@ -60,7 +99,8 @@ indexed into the same store the copilot and search use, so it becomes retrievabl
 can adopt it and run its own operation:
 
 - **Data entry, edit, and delete** on every operational entity, with role-based permissions and
-  foreign-key-safe deletes.
+  foreign-key-safe deletes. A wrong or stale memory record can likewise be deleted directly from the
+  Memory page by anyone permitted to write memory, not just corrected via a database console.
 - **Bulk import** from CSV or Excel for projects, suppliers, and every child entity, with per-row
   validation, a dry-run preview, downloadable templates, and human `project_code` → ID resolution.
 - **Synthetic demo data** — `scripts/seed_demo_data.py` populates an empty install with a realistic,
@@ -87,10 +127,10 @@ can adopt it and run its own operation:
 
 The backend is layered consistently: Pydantic `schemas` define the API contract, `services` hold the
 business logic and database access, and thin `api/v1` routers wire them together. The AI layer lives
-in `agents/` (prompts, the copilot, the memory extractor, and one module per workflow) with no
-LangChain — the agent loop, retrieval, and memory are all written directly so the behavior is
-auditable. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design and
-[docs/SECURITY.md](docs/SECURITY.md) for the security model.
+in `agents/` (prompts, the copilot, the memory extractor, one module per workflow, and the agent
+core with its tool registry) with no LangChain — the agent loop, retrieval, and memory are all
+written directly so the behavior is auditable. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for
+the full design and [docs/SECURITY.md](docs/SECURITY.md) for the security model.
 
 ## How the AI is kept reliable
 
@@ -176,10 +216,38 @@ All accounts use the password `Passw0rd!`.
 | `qaqc@construction-ops.com` | qa_qc | meetings, memory |
 | `viewer@construction-ops.com` | viewer | read-only |
 
+### Choosing an LLM engine
+
+The platform depends only on an OpenAI-compatible chat endpoint, so the model is a swappable
+component selected with `LLM_PROVIDER`. The base URL and model default to each provider's preset, so
+switching engines is a one-line change.
+
+| `LLM_PROVIDER` | Engine | Notes |
+|---|---|---|
+| `mock` | none | Deterministic, offline, zero cost. Always used by the test suite. |
+| `local` | Open-weights model via Ollama | Runs on your machine — free, unlimited, private. No key. |
+| `groq` | Hosted free tier | Fast, OpenAI-compatible. Set `LLM_API_KEY` to a Groq key. |
+| `gemini` | Google AI Studio | Free tier is rate-limited. Set `LLM_API_KEY` to a Gemini key. |
+
+**Running the model locally (recommended for a private, unlimited engine).** Because the platform
+computes every number deterministically and asks the model only to read text and write prose or JSON,
+a compact open-weights model is sufficient. Install [Ollama](https://ollama.com), then download the
+model:
+
+```bash
+ollama pull qwen2.5:7b-instruct       # one-time download (~5 GB)
+```
+
+So the API container (in Docker) can reach Ollama on the host, enable **Settings → "Expose Ollama to
+the network"** in the Ollama app — or set `OLLAMA_HOST=0.0.0.0` — and confirm it is listening on
+`0.0.0.0:11434`. Then set `LLM_PROVIDER=local` in `.env` and restart the API
+(`docker compose up -d api`). The container reaches Ollama at `http://host.docker.internal:11434/v1/`.
+A 16 GB GPU runs a 7B model comfortably; inference falls back to CPU where no GPU is available.
+
 ## Testing and quality
 
 ```bash
-docker compose run --rm -e TESTING=1 api pytest -q   # 163 tests, offline, deterministic
+docker compose run --rm -e TESTING=1 api pytest -q   # 264 tests, offline, deterministic
 docker compose run --rm api ruff check app scripts tests
 ```
 
@@ -207,7 +275,7 @@ construction-ai-platform/
 │   ├── tests/
 │   ├── Dockerfile
 │   └── pyproject.toml
-├── frontend/                  # React + TypeScript dashboard (15 areas)
+├── frontend/                  # React + TypeScript dashboard (16 areas)
 ├── docs/                      # ARCHITECTURE, SECURITY, DEMO
 ├── docker-compose.yml
 └── README.md

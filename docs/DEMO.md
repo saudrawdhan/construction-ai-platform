@@ -1,8 +1,8 @@
 # Demonstration Script
 
-An end-to-end walkthrough of the platform, organized as nine scenarios that together cover the
-operational record, all six AI workflows, the copilot, memory, document ingestion, governance, and
-running the system as a product on your own data. Estimated duration: 12–15 minutes.
+An end-to-end walkthrough of the platform, organized as ten scenarios that together cover the
+operational record, all six AI workflows, the copilot, the agent, memory, document ingestion,
+governance, and running the system as a product on your own data. Estimated duration: 13–16 minutes.
 
 ## Setup
 
@@ -15,8 +15,9 @@ cd frontend && npm run dev        # http://localhost:5173
 
 The API uses Gemini by default. Its free tier is limited in volume, so for a rehearsal — or to avoid
 using quota before the actual presentation — run the API with `LLM_PROVIDER=mock`; every AI feature
-behaves identically, using deterministic reasoning instead of a live model call. Switch to the real
-provider for the presentation itself.
+behaves identically, using deterministic reasoning instead of a live model call. A local open-weights
+model is also a supported provider (`LLM_PROVIDER=local`, see the README) and runs unlimited real
+inference with no quota concern at all. Switch to whichever provider fits the presentation itself.
 
 Sign in as `executive@construction-ops.com` / `Passw0rd!` unless a step specifies a different account.
 
@@ -64,7 +65,27 @@ copilot returns **No evidence found** rather than producing an answer.
 **Demonstrates:** the assistant answers only from retrieved evidence and explicitly declines when none
 exists; the refusal path does not call the language model at all.
 
-## 5. Enterprise Memory
+## 5. The Agent — Planning, Memory, Conversation, and Skills
+
+Open **Agent**, choose a project from the scope selector, and give it a goal, for example: *"Give me
+a status overview of this project's procurement health — any risks, overdue RFIs, or supplier
+issues."* The agent plans and executes a sequence of tool calls, and the **trajectory** appears step
+by step in a chat thread. Note the badge showing it **learned a skill** from the task, now visible in
+the **Skill library** on the right.
+
+Without touching the project selector again, ask a natural follow-up: *"What about the suppliers
+involved — are any of them high risk?"* The reply stays in the same thread (shown by the
+**Conversation #** label), and the trajectory shows the project scope carried forward automatically
+— the agent is reasoning about what was just discussed, not starting over from an empty goal.
+
+Start a **new conversation** and ask the same first question again on a different project. The badge
+now shows it **reused** the earlier skill instead of planning from scratch.
+
+**Demonstrates:** the agent reasons over a goal with visible, auditable tool use; it remembers this
+conversation so a follow-up resolves naturally; it keeps its own memory across sessions; and it turns
+experience into reusable skills — extending what it can do without executing any opaque code.
+
+## 6. Enterprise Memory
 
 Open **Memory** and search for a term such as *"supplier delays"* — the supplier risk finding from
 Scenario 3 is now retrievable. Optionally, open **Extract Agent**, provide a short passage of meeting
@@ -73,7 +94,7 @@ notes, and show the categorized, confidence-scored memories it produces.
 **Demonstrates:** findings are stored with their source and category and are fed back into future
 analysis — the organizational-memory requirement made concrete.
 
-## 6. Document Ingestion and Search
+## 7. Document Ingestion and Search
 
 Open **Documents → Upload**, select a project, and upload a short PDF or text file. The response
 confirms the file was parsed, chunked, embedded, and indexed. Switch to **Semantic Search** and query
@@ -82,7 +103,7 @@ a phrase from the uploaded file to confirm it returns as a result and is now ava
 **Demonstrates:** new documents enter the same knowledge base the AI already reasons over, with no
 separate ingestion pipeline.
 
-## 7. Governance and Human Approval
+## 8. Governance and Human Approval
 
 Run a workflow that recommends a high-risk action — for example **Procurement → Purchase Requests →
 Analyze**, or **Suppliers → Risk**. In the result, choose **Request Approval**: the AI's
@@ -99,7 +120,7 @@ with its workflow, provider, model, and an excerpt of the output.
 **Demonstrates:** the full human-in-the-loop loop — the AI recommends, a person decides, the requester
 is notified, and every AI action is recorded. No high-risk action proceeds on its own.
 
-## 8. Running It as a Product — Data Entry from an Empty System
+## 9. Running It as a Product — Data Entry from an Empty System
 
 Sign in as `admin@construction-ops.com`. Open **Projects** and choose **New Project** to add a record
 through a form; open its detail page to see its own workspace of RFIs, orders, meetings, and reports.
@@ -116,7 +137,7 @@ project instead of showing empty tables.
 database and enter, import, edit, and remove its own records, with the same permissions and validation
 throughout.
 
-## 9. Scheduled Automation (optional)
+## 10. Scheduled Automation (optional)
 
 From the shell, run the automations in a dry run — the same logic the scheduled worker executes each
 morning:

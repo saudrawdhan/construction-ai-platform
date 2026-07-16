@@ -40,6 +40,7 @@ server is the authority — a hidden button is a convenience, not a control.
 | Upload documents | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Write / extract memory | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Approve / reject approvals | ✓ | ✓ | ✓ | | | | |
+| Run the agent / view its history | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | View AI audit trail | ✓ | ✓ | | | | | |
 
 The `viewer` role is strictly read-only across the platform.
@@ -60,6 +61,42 @@ auditable. Both are enforced structurally, not by convention.
   excerpt. `GET /audit/ai-outputs` exposes this to admins and executives.
 - **Source attribution.** Workflow and copilot responses carry the documents and memory records they
   drew on, so a reader can trace any recommendation back to its evidence.
+- **Tool-level authorization inside the agent.** The agent can reach every AI workflow through a
+  single tool registry, so reaching a capability through a goal must never grant more than calling
+  that capability's own endpoint would. Each tool carries the same role restriction as its direct API
+  route (for example, the agent's `assess_supplier_risk` tool is limited to admin, executive, and
+  procurement_officer, matching `POST /suppliers/{id}/risk-assessment`), checked before every
+  execution — a disallowed tool is refused with an explanation, not silently run. This check also
+  applies when the agent replays a stored skill: a skill is re-authorized against whoever is running
+  it now, not the role that originally created it, so a skill can never become a way to route around
+  a restriction that was never bypassable directly. Because agent trajectories can surface the output
+  of role-restricted tools, the agent's run history and skill library are not exposed to `viewer`,
+  matching the same rule already applied to `GET /audit/ai-outputs`.
+- **Agent runs and conversations are owned, not shared, by default.** `GET /ai/agent/runs` and
+  `GET /ai/agent/runs/{id}` scope to the requesting user unless the role is admin or executive; a run
+  that exists but belongs to someone else returns `404`, the same response as a run that does not
+  exist at all, so the endpoint cannot be used to confirm another user's activity. Supplying another
+  user's `conversation_id` does not continue their conversation — a mismatched id is treated as no id
+  at all and a fresh conversation starts instead. Skills remain intentionally shared and org-wide,
+  since a reusable procedure is not any one person's data.
+- **Untrusted content inside the agent's own context.** Text pulled back from memory, documents, or
+  past sessions is fed into the planner and the final-answer prompt as *evidence*, but nothing about
+  a plain string distinguishes organizational data from an embedded instruction. Retrieved content is
+  screened for two independent patterns before it reaches either prompt: attack-style phrasing (for
+  example, an "ignore all prior instructions" override) and a specific governance claim — an
+  approval, threshold, or review step framed as already waived — regardless of how ordinary the
+  wording sounds. A match is wrapped in an explicit warning marker, and both prompts instruct the
+  model that retrieved content is data, never instructions, and that a suspicious or unverified claim
+  must be reported to the human, not acted on or restated as settled fact. This is a heuristic layered
+  on top of the agent's own judgment, not a guarantee against every possible phrasing — it closed a
+  live-reproduced case where a single poisoned memory record talked the agent into recommending that
+  a real purchase-order approval step be skipped.
+- **No individual user profiling.** The agent recalls a user's own recent runs ahead of the wider
+  organizational record (`recall_past_sessions` ranks the requester's own prior work first), and a
+  follow-up in the same conversation carries its project scope forward. Neither mechanism builds a
+  behavioral, preference, or personality model of a person — nothing beyond a user id association on
+  each run is retained about *who* asked. This is a deliberate boundary for a workplace tool used by
+  many employees under a shared audit trail, not a missing feature.
 
 ## Rate limiting
 
@@ -69,11 +106,15 @@ design — if Redis is unreachable it fails open rather than locking users out, 
 under `TESTING` so the suite stays deterministic. In production a shared Redis makes the limit apply
 across all API instances.
 
-The limiter keys on the request's direct peer address (`request.client.host`). Behind a reverse
-proxy or load balancer that address is the proxy's, so per-client limiting requires the deployment to
-resolve the real client IP from a trusted `X-Forwarded-For` hop (for example via Uvicorn's
-`--proxy-headers` with a configured trusted-host list). Until that is configured, treat the login
-limit as a global throttle rather than a strict per-client one.
+The limiter keys on the authenticated user's id, decoded from the same bearer token or cookie the
+request is already carrying, so a shared corporate egress IP does not throttle every employee behind
+it as a single budget — a limit that matters more on the heavier-weight agent and copilot endpoints
+than it does on login. It falls back to the request's direct peer address (`request.client.host`)
+only when no valid token is present, which is exactly the login endpoint's own case (no token exists
+yet by definition), so login's brute-force protection is unchanged. Behind a reverse proxy or load
+balancer that fallback address is the proxy's, so IP-based limiting for unauthenticated requests
+still requires the deployment to resolve the real client IP from a trusted `X-Forwarded-For` hop (for
+example via Uvicorn's `--proxy-headers` with a configured trusted-host list).
 
 ## Transport and headers
 
