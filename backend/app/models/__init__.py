@@ -1,3 +1,4 @@
+from app.models.agent import AgentRun, AgentSkill
 from app.models.ai_layer import (
     AiAuditLog,
     AiConversation,
@@ -30,6 +31,8 @@ from app.models.subcontractors import Subcontractor, SubcontractorEvaluation
 from app.models.technical import ChangeOrder, Ncr, Rfi, SafetyEvent
 
 __all__ = [
+    "AgentRun",
+    "AgentSkill",
     "AiAuditLog",
     "AiConversation",
     "AiMemory",

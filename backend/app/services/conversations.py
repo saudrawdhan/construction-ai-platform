@@ -13,7 +13,10 @@ async def get_or_create_conversation(
 ) -> AiConversation:
     if conversation_id is not None:
         existing = await db.get(AiConversation, conversation_id)
-        if existing is not None:
+        # A conversation belongs to whoever started it. An id for someone else's
+        # conversation must never continue it — that would inherit their project scope
+        # and history into this user's answer. Treat it exactly like no id was given.
+        if existing is not None and existing.user_id == user_id:
             return existing
     conversation = AiConversation(user_id=user_id, project_id=project_id, title=title[:255])
     db.add(conversation)

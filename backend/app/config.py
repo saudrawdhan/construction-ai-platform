@@ -2,6 +2,16 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Endpoint and default model for each supported provider. Any OpenAI-compatible engine works;
+# these presets let an operator select one with a single LLM_PROVIDER value. Explicit
+# LLM_BASE_URL / LLM_MODEL settings always take precedence over the preset.
+LLM_PRESETS: dict[str, tuple[str, str]] = {
+    "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-2.5-flash"),
+    "groq": ("https://api.groq.com/openai/v1/", "llama-3.3-70b-versatile"),
+    "openai": ("https://api.openai.com/v1/", "gpt-4o-mini"),
+    "local": ("http://host.docker.internal:11434/v1/", "qwen2.5:7b-instruct"),
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -22,11 +32,14 @@ class Settings(BaseSettings):
     )
     redis_url: str = "redis://localhost:6379/0"
 
+    # LLM engine behind the LLMClient abstraction. "mock" (default in tests) spends nothing;
+    # "local" runs an open-weights model via Ollama on this machine; "gemini"/"groq"/"openai"
+    # call a cloud endpoint. Base URL and model fall back to the provider preset when left blank.
     llm_provider: str = "gemini"
-    llm_model: str = "gemini-2.5-flash"
-    llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    llm_model: str = ""
+    llm_base_url: str = ""
     llm_api_key: str = ""
-    llm_request_timeout: float = 60.0
+    llm_request_timeout: float = 120.0
     llm_max_retries: int = 6
     llm_backoff_base: float = 1.0
     llm_backoff_cap: float = 30.0
@@ -46,6 +59,12 @@ class Settings(BaseSettings):
     auth_cookie_name: str = "access_token"
     cookie_secure: bool = False
     cookie_samesite: str = "lax"
+
+    def resolved_llm_endpoint(self) -> tuple[str, str]:
+        """Return the (base_url, model) to use, applying the provider preset for any value not
+        set explicitly. Explicit LLM_BASE_URL / LLM_MODEL always win."""
+        preset = LLM_PRESETS.get(self.llm_provider, ("", ""))
+        return (self.llm_base_url or preset[0], self.llm_model or preset[1])
 
 
 @lru_cache

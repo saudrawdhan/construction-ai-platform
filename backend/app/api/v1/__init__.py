@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    ai_agent,
     ai_copilot,
     approvals,
     audit,
@@ -37,6 +38,7 @@ api_router.include_router(documents.router)
 api_router.include_router(reports.router)
 api_router.include_router(memory.router)
 api_router.include_router(ai_copilot.router)
+api_router.include_router(ai_agent.router)
 api_router.include_router(approvals.router)
 api_router.include_router(audit.router)
 api_router.include_router(notifications.router)

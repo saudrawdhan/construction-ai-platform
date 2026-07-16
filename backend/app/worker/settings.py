@@ -1,6 +1,6 @@
 """arq worker: registers the scheduled automations and their cron schedule. Each job opens an
 async session, runs the task logic, and commits. The worker service runs with LLM_PROVIDER=mock
-so recurring jobs are deterministic and never spend Gemini quota.
+so recurring jobs are deterministic and never incur LLM API cost.
 """
 
 from collections.abc import Awaitable, Callable

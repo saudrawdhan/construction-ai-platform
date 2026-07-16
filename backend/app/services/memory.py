@@ -21,6 +21,9 @@ async def create_memory(
     *,
     created_by: str = "user",
 ) -> AiMemory:
+    existing = await _find_exact_duplicate(db, data)
+    if existing is not None:
+        return existing
     embed_text = data.summary if not data.detail else f"{data.summary}\n{data.detail}"
     (vector,) = await embedder.embed_documents([embed_text])
     memory = AiMemory(
@@ -40,8 +43,37 @@ async def create_memory(
     return memory
 
 
+async def _find_exact_duplicate(db: AsyncSession, data: MemoryCreate) -> AiMemory | None:
+    """An exact-duplicate summary in the same project/category scope adds retrieval noise
+    without adding information — live audit testing found a duplicate memory surfaced twice,
+    verbatim, in every search that matched it. Skip inserting a repeat and return the
+    existing record instead. Conservative on purpose: only a case/whitespace-insensitive
+    EXACT match is treated as a duplicate, so two genuinely different findings about the
+    same project and category are never silently merged."""
+    stmt = select(AiMemory).where(
+        AiMemory.superseded_by_id.is_(None),
+        AiMemory.category == data.category.value,
+        func.lower(func.trim(AiMemory.summary)) == data.summary.strip().lower(),
+    )
+    stmt = stmt.where(
+        AiMemory.project_id == data.project_id
+        if data.project_id is not None
+        else AiMemory.project_id.is_(None)
+    )
+    return await db.scalar(stmt.limit(1))
+
+
 async def get_memory(db: AsyncSession, memory_id: int) -> AiMemory | None:
     return await db.get(AiMemory, memory_id)
+
+
+async def delete_memory(db: AsyncSession, memory_id: int) -> bool:
+    memory = await db.get(AiMemory, memory_id)
+    if memory is None:
+        return False
+    await db.delete(memory)
+    await db.flush()
+    return True
 
 
 async def list_memories(
@@ -115,7 +147,21 @@ async def search_memories(
     if not scores:
         return []
 
-    top_ids = sorted(scores, key=lambda i: scores[i], reverse=True)[:k]
-    rows = await db.scalars(select(AiMemory).where(AiMemory.id.in_(top_ids)))
+    rows = await db.scalars(select(AiMemory).where(AiMemory.id.in_(list(scores))))
     by_id = {row.id: row for row in rows}
+
+    # RRF alone ranks purely by retrieval-channel rank position, so a poorly-attested finding
+    # can outrank a well-attested one that simply scored a fraction lower on textual/semantic
+    # closeness — live-verified with a deliberately poisoned pair (a 0.2-confidence false claim
+    # ranked above a 0.95-confidence correct one). A memory with no confidence set is treated as
+    # moderately trustworthy rather than penalized, since most memories are never explicitly
+    # rated. This only reorders the returned set; the relevance score shown to the caller stays
+    # the raw RRF value so it keeps meaning "how well this matched," with confidence surfaced
+    # separately (already shown per-memory) rather than folded into one blended number.
+    def _rank_weight(memory_id: int) -> float:
+        memory = by_id.get(memory_id)
+        confidence = memory.confidence if memory and memory.confidence is not None else 0.7
+        return scores[memory_id] * (0.5 + 0.5 * float(confidence))
+
+    top_ids = sorted(scores, key=_rank_weight, reverse=True)[:k]
     return [(by_id[i], round(scores[i], 6)) for i in top_ids if i in by_id]

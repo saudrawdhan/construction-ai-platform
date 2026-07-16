@@ -1,10 +1,12 @@
 """Provider-agnostic LLM client.
 
-All agent/workflow code depends on the ``LLMClient`` protocol, never on a concrete SDK. A
-``MockLLM`` is the default under tests and dev so the suite and rehearsed demos spend zero
-quota; ``OpenAICompatLLM`` covers Gemini (via its OpenAI-compatible endpoint), OpenAI,
-OpenRouter, Groq, and local Ollama/vLLM. The real adapter retries transient 5xx "high
-demand" responses with exponential backoff and surfaces 429 quota exhaustion explicitly.
+All agent and workflow code depends on the ``LLMClient`` protocol, never on a concrete SDK.
+``MockLLM`` is always used under tests (and available as a provider) so the suite and offline
+demos spend nothing. ``OpenAICompatLLM`` speaks the OpenAI chat format and therefore serves any
+compatible engine: a local open-weights model via Ollama or vLLM, or a hosted API such as Groq,
+Gemini, or OpenAI. The real adapter retries transient 5xx responses with exponential backoff and
+surfaces 429 rate-limit or quota exhaustion explicitly. The active engine is chosen by
+``LLM_PROVIDER``; the endpoint and model come from the provider preset unless set explicitly.
 """
 
 import asyncio
@@ -93,8 +95,6 @@ class MockLLM:
 
 
 class OpenAICompatLLM:
-    provider = "openai_compat"
-
     def __init__(
         self,
         *,
@@ -105,8 +105,10 @@ class OpenAICompatLLM:
         max_retries: int,
         backoff_base: float,
         backoff_cap: float,
+        provider: str = "openai_compat",
     ) -> None:
         self.model = model
+        self.provider = provider
         self._max_retries = max_retries
         self._backoff_base = backoff_base
         self._backoff_cap = backoff_cap
@@ -156,7 +158,9 @@ class OpenAICompatLLM:
                 last_error = LLMError(f"network error: {exc}")
             else:
                 if response.status_code == 429:
-                    raise LLMQuotaError("Gemini free-tier quota exhausted (HTTP 429)")
+                    raise LLMQuotaError(
+                        f"{self.provider} rate limit or quota exceeded (HTTP 429)"
+                    )
                 if response.status_code not in _RETRYABLE_STATUS:
                     response.raise_for_status()
                     return response.json()
@@ -180,16 +184,25 @@ def get_llm() -> LLMClient:
     creating one per request would leak connections. The mock is cheap and stateless."""
     global _real_llm
     if os.environ.get("TESTING") or settings.llm_provider == "mock":
-        return MockLLM(model=settings.llm_model)
+        return MockLLM(model=settings.llm_model or "mock")
     if _real_llm is None:
+        base_url, model = settings.resolved_llm_endpoint()
+        if not base_url or not model:
+            raise LLMError(
+                f"LLM provider '{settings.llm_provider}' has no endpoint configured. "
+                "Set LLM_PROVIDER to a known provider (local, gemini, groq, openai, mock) "
+                "or provide LLM_BASE_URL and LLM_MODEL explicitly."
+            )
         _real_llm = OpenAICompatLLM(
-            model=settings.llm_model,
-            base_url=settings.llm_base_url,
-            api_key=settings.llm_api_key,
+            model=model,
+            base_url=base_url,
+            # Local engines (Ollama) ignore the key but reject an empty bearer token.
+            api_key=settings.llm_api_key or "not-required",
             timeout=settings.llm_request_timeout,
             max_retries=settings.llm_max_retries,
             backoff_base=settings.llm_backoff_base,
             backoff_cap=settings.llm_backoff_cap,
+            provider=settings.llm_provider,
         )
     return _real_llm
 

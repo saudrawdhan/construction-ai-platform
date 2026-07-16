@@ -132,3 +132,11 @@ async def get_memory(memory_id: int, db: DbSession, _: CurrentUser) -> MemoryRea
     if memory is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Memory not found")
     return MemoryRead.model_validate(memory)
+
+
+@router.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_memory(memory_id: int, db: DbSession, user: Contributors) -> None:
+    deleted = await memory_service.delete_memory(db, memory_id)
+    if not deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Memory not found")
+    await db.commit()

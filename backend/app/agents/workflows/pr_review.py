@@ -111,10 +111,11 @@ async def run(db: AsyncSession, *, pr_id: int, llm: LLMClient) -> PurchaseReques
             max_tokens=1024,
         )
         parsed = parse_json_object(result.text)
+        # The risk level and its approval route are computed deterministically and stay
+        # authoritative — governance must not depend on model output. The model contributes only
+        # the descriptive material category and the written recommendation.
         category = parsed.get("material_category") or category
-        risk = parsed.get("risk_level") or risk
         recommendation = parsed.get("recommendation") or recommendation
-        approvals = parsed.get("required_approvals") or _APPROVALS.get(risk, approvals)
 
     await log_ai_call(
         db,

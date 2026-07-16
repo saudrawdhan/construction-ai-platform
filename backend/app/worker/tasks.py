@@ -1,7 +1,7 @@
-"""Scheduled-automation task logic (spec: Hermes-inspired scheduled automations). Pure async
-functions that take a session so they are unit-testable without the cron runtime. They persist
-ai_summaries and role-targeted notifications; the arq wrapper opens the session and commits.
-Run in mock LLM mode so recurring jobs never consume the Gemini free-tier quota.
+"""Scheduled-automation task logic. Pure async functions that take a session so they are
+unit-testable without the cron runtime. They persist ai_summaries and role-targeted
+notifications; the arq wrapper opens the session and commits. These jobs run in mock LLM mode so
+recurring automation never incurs LLM API cost.
 """
 
 from datetime import date, timedelta
