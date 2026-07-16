@@ -14,6 +14,7 @@ import Meetings from "./pages/Meetings";
 import SiteReports from "./pages/SiteReports";
 import Reports from "./pages/Reports";
 import Copilot from "./pages/Copilot";
+import Agent from "./pages/Agent";
 import Approvals from "./pages/Approvals";
 import Memory from "./pages/Memory";
 import Audit from "./pages/Audit";
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="/documents" element={<Documents />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/copilot" element={<Copilot />} />
+            <Route path="/agent" element={<Agent />} />
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/memory" element={<Memory />} />
             <Route path="/audit" element={<Audit />} />

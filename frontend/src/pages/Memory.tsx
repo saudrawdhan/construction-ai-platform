@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search, Sparkles, Plus } from "lucide-react";
+import { Search, Sparkles, Plus, Trash2 } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { dateTime, titleCase } from "../lib/format";
@@ -8,9 +8,11 @@ import {
   Button,
   Card,
   EmptyState,
+  ErrorBox,
   Field,
   FilterBar,
   Input,
+  Modal,
   PageHeader,
   Pagination,
   ProviderTag,
@@ -64,7 +66,27 @@ const categoryTone: Record<string, "red" | "amber" | "blue" | "green" | "slate">
   supplier_performance: "slate",
 };
 
-function MemoryCard({ m, score }: { m: Memory; score?: number }) {
+function MemoryCard({ m, score, onDeleted }: { m: Memory; score?: number; onDeleted?: () => void }) {
+  const { user } = useAuth();
+  const canManage = !!user && user.role !== "viewer";
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function confirmDelete() {
+    setDeleting(true);
+    setError(undefined);
+    try {
+      await api.del(`/memory/${m.id}`);
+      setConfirming(false);
+      onDeleted?.();
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="rounded-lg border border-slate-200 p-4">
       <div className="flex items-center justify-between">
@@ -72,6 +94,15 @@ function MemoryCard({ m, score }: { m: Memory; score?: number }) {
         <div className="flex items-center gap-2 text-xs text-slate-400">
           {score !== undefined && <span className="font-medium text-blue-600">score {score.toFixed(3)}</span>}
           {m.confidence !== null && <span>conf {m.confidence.toFixed(2)}</span>}
+          {canManage && onDeleted && (
+            <button
+              onClick={() => setConfirming(true)}
+              aria-label="Delete memory"
+              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       </div>
       <p className="mt-2 text-sm font-medium text-slate-800">{m.summary}</p>
@@ -81,6 +112,25 @@ function MemoryCard({ m, score }: { m: Memory; score?: number }) {
         {m.source_type ? ` · source: ${m.source_type}` : ""}
         {m.project_id ? ` · project #${m.project_id}` : ""}
       </div>
+
+      {confirming && (
+        <Modal title="Delete Memory" onClose={() => setConfirming(false)}>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              This will permanently delete this memory. This action cannot be undone.
+            </p>
+            {error && <ErrorBox message={error} />}
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setConfirming(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" disabled={deleting} onClick={confirmDelete}>
+                {deleting ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -161,7 +211,7 @@ function Browse() {
       ) : (
         <div className="space-y-3">
           {data.items.map((m) => (
-            <MemoryCard key={m.id} m={m} />
+            <MemoryCard key={m.id} m={m} onDeleted={() => setRefresh((r) => r + 1)} />
           ))}
         </div>
       )}
@@ -239,7 +289,14 @@ function SearchTab() {
       {results && (
         <div className="space-y-3">
           {results.map(({ memory, score }) => (
-            <MemoryCard key={memory.id} m={memory} score={score} />
+            <MemoryCard
+              key={memory.id}
+              m={memory}
+              score={score}
+              onDeleted={() =>
+                setResults((prev) => prev?.filter((r) => r.memory.id !== memory.id))
+              }
+            />
           ))}
           {results.length === 0 && (
             <Card>
