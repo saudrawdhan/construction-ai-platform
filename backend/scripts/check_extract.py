@@ -1,5 +1,5 @@
-"""One real Gemini call to validate the Memory Extraction Agent's live path: confirms the
-model returns JSON the parser accepts. Spends a single request.
+"""One real call to the configured LLM provider to validate the Memory Extraction Agent's live
+path: confirms the model returns JSON the parser accepts. Spends a single request.
 """
 
 import asyncio
