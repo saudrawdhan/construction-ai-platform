@@ -99,3 +99,34 @@ async def test_workflows_write_audit_log(client, admin_headers, db_session):
         )
     )
     assert count >= 1
+
+
+class _RiskOverrideStubLLM:
+    """A non-mock provider that returns an out-of-enum risk_level and a narrative, to prove the
+    review keeps the deterministic risk and approval route while taking the model's wording."""
+
+    provider = "local"
+    model = "stub"
+
+    async def complete(
+        self, *, system, messages, temperature=0.2, max_tokens=None, json_mode=False
+    ):
+        from app.services.llm import LLMResult
+
+        text = (
+            '{"risk_level": "Catastrophic", "material_category": "Structural Steel", '
+            '"recommendation": "Escalate to the commercial lead.", '
+            '"required_approvals": ["Everyone"]}'
+        )
+        return LLMResult(text=text, model=self.model, provider=self.provider)
+
+
+async def test_pr_review_keeps_deterministic_risk_and_approvals(db_session):
+    from app.agents.workflows import pr_review
+
+    review = await pr_review.run(db_session, pr_id=1, llm=_RiskOverrideStubLLM())
+    assert review is not None
+    assert review.risk_level in {"Low", "Medium", "High"}
+    assert "Everyone" not in review.required_approvals
+    assert review.material_category == "Structural Steel"
+    assert review.recommendation == "Escalate to the commercial lead."

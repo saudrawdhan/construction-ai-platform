@@ -12,6 +12,8 @@ TEST_PASSWORD = "Passw0rd!"
 TEST_ACCOUNTS = {
     "admin": ("test-admin@construction-ops.com", Role.ADMIN),
     "viewer": ("test-viewer@construction-ops.com", Role.VIEWER),
+    "site_engineer": ("test-site-engineer@construction-ops.com", Role.SITE_ENGINEER),
+    "procurement": ("test-procurement@construction-ops.com", Role.PROCUREMENT_OFFICER),
 }
 
 
@@ -67,4 +69,16 @@ async def admin_headers(client, db_session):
 @pytest_asyncio.fixture
 async def viewer_headers(client, db_session):
     token = await _token(client, db_session, "viewer")
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def site_engineer_headers(client, db_session):
+    token = await _token(client, db_session, "site_engineer")
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def procurement_headers(client, db_session):
+    token = await _token(client, db_session, "procurement")
     return {"Authorization": f"Bearer {token}"}
