@@ -219,3 +219,163 @@ async def test_viewer_cannot_import_child_entity(client, viewer_headers):
         data={"dry_run": "false"},
     )
     assert response.status_code == 403
+
+
+async def _first_request_no_and_supplier(client, headers) -> tuple[str, str]:
+    pr = (await client.get("/api/v1/procurement/purchase-requests?size=1", headers=headers)).json()
+    supplier = (await client.get("/api/v1/suppliers?size=1", headers=headers)).json()
+    return pr["items"][0]["request_no"], supplier["items"][0]["supplier_name"]
+
+
+async def _po_total(client, headers) -> int:
+    return (
+        await client.get("/api/v1/procurement/purchase-orders?size=1", headers=headers)
+    ).json()["total"]
+
+
+async def test_import_purchase_orders_resolves_request_no_and_supplier(client, admin_headers):
+    request_no, supplier_name = await _first_request_no_and_supplier(client, admin_headers)
+    before = await _po_total(client, admin_headers)
+    csv_data = (
+        "request_no,supplier_name,po_number,status\n"
+        f"{request_no},{supplier_name},PO-IMP-1,Issued\n"
+        "NOPE-0000,Some Unknown Supplier,PO-IMP-2,Issued\n"
+    ).encode()
+    response = await client.post(
+        "/api/v1/procurement/purchase-orders/import",
+        headers=admin_headers,
+        files={"file": ("pos.csv", csv_data, "text/csv")},
+        data={"dry_run": "false"},
+    )
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert report["total_rows"] == 2
+    assert report["valid_rows"] == 1
+    assert report["created"] == 1
+    assert report["errors"][0]["row"] == 3
+    row_errors = " ".join(report["errors"][0]["errors"])
+    assert "unknown purchase request 'NOPE-0000'" in row_errors
+    assert "unknown supplier 'Some Unknown Supplier'" in row_errors
+    assert await _po_total(client, admin_headers) == before + 1
+
+
+async def test_purchase_order_import_matches_request_no_and_supplier_case_insensitively(
+    client, admin_headers
+):
+    """Human-typed spreadsheet values shouldn't fail on casing alone — WRONG.CASE and Wrong.Case
+    should both resolve to the same real record as the exact casing stored in the database."""
+    request_no, supplier_name = await _first_request_no_and_supplier(client, admin_headers)
+    before = await _po_total(client, admin_headers)
+    csv_data = (
+        "request_no,supplier_name,po_number,status\n"
+        f"{request_no.lower()},{supplier_name.upper()},PO-IMP-CASE,Issued\n"
+    ).encode()
+    response = await client.post(
+        "/api/v1/procurement/purchase-orders/import",
+        headers=admin_headers,
+        files={"file": ("pos.csv", csv_data, "text/csv")},
+        data={"dry_run": "false"},
+    )
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert report["valid_rows"] == 1, report["errors"]
+    assert report["created"] == 1
+    assert await _po_total(client, admin_headers) == before + 1
+
+
+async def test_purchase_order_import_matches_supplier_with_extra_internal_whitespace(
+    client, admin_headers
+):
+    """A stray extra space typed into a supplier name ("Risk  Supplier 001") shouldn't fail on
+    whitespace alone — .strip() (applied at parse time) only catches leading/trailing spaces, not
+    an internal double space, so this needs its own normalization and its own test."""
+    request_no, supplier_name = await _first_request_no_and_supplier(client, admin_headers)
+    doubled_space_name = "  ".join(supplier_name.split(" "))
+    before = await _po_total(client, admin_headers)
+    csv_data = (
+        "request_no,supplier_name,po_number,status\n"
+        f"{request_no},{doubled_space_name},PO-IMP-WS,Issued\n"
+    ).encode()
+    response = await client.post(
+        "/api/v1/procurement/purchase-orders/import",
+        headers=admin_headers,
+        files={"file": ("pos.csv", csv_data, "text/csv")},
+        data={"dry_run": "false"},
+    )
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert report["valid_rows"] == 1, report["errors"]
+    assert report["created"] == 1
+    assert await _po_total(client, admin_headers) == before + 1
+
+
+async def test_purchase_order_import_blank_resolver_fields_are_row_errors(client, admin_headers):
+    """Blank request_no/supplier_name must be reported as clear row errors (distinct from an
+    unrecognized value) rather than crashing or being silently coerced into something else."""
+    csv_data = b"request_no,supplier_name,po_number,status\n,,PO-IMP-BLANK,Issued\n"
+    response = await client.post(
+        "/api/v1/procurement/purchase-orders/import",
+        headers=admin_headers,
+        files={"file": ("pos.csv", csv_data, "text/csv")},
+        data={"dry_run": "false"},
+    )
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert report["valid_rows"] == 0
+    assert report["invalid_rows"] == 1
+    row_errors = " ".join(report["errors"][0]["errors"])
+    assert "request_no: this field is required" in row_errors
+    assert "supplier_name: this field is required" in row_errors
+
+
+async def test_purchase_order_import_derives_project_from_request(client, admin_headers):
+    """The imported PO's project_id must match its resolved request's own project — proving
+    project_id is genuinely derived from request_no, not left unset or wrong."""
+    pr_response = await client.get(
+        "/api/v1/procurement/purchase-requests?size=1", headers=admin_headers
+    )
+    pr = pr_response.json()["items"][0]
+    supplier_name = (
+        (await client.get("/api/v1/suppliers?size=1", headers=admin_headers)).json()
+    )["items"][0]["supplier_name"]
+    csv_data = (
+        "request_no,supplier_name,po_number,status\n"
+        f"{pr['request_no']},{supplier_name},PO-IMP-3,Issued\n"
+    ).encode()
+    response = await client.post(
+        "/api/v1/procurement/purchase-orders/import",
+        headers=admin_headers,
+        files={"file": ("pos.csv", csv_data, "text/csv")},
+        data={"dry_run": "false"},
+    )
+    assert response.status_code == 200, response.text
+    orders = (
+        await client.get(
+            f"/api/v1/procurement/purchase-orders?project_id={pr['project_id']}&size=100",
+            headers=admin_headers,
+        )
+    ).json()["items"]
+    assert any(o["po_number"] == "PO-IMP-3" and o["project_id"] == pr["project_id"] for o in orders)
+
+
+async def test_purchase_order_import_template_has_no_project_code(client, admin_headers):
+    """Deliberately different from the other child-entity templates: project_id is derived from
+    the resolved request_no, so there's no project_code column to fill in."""
+    response = await client.get(
+        "/api/v1/procurement/purchase-orders/import/template", headers=admin_headers
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert response.text.startswith("request_no,supplier_name,")
+    assert "project_code" not in response.text
+
+
+async def test_viewer_cannot_import_purchase_orders(client, viewer_headers):
+    csv_data = b"request_no,supplier_name,po_number\nPR-001,Some Supplier,PO-999\n"
+    response = await client.post(
+        "/api/v1/procurement/purchase-orders/import",
+        headers=viewer_headers,
+        files={"file": ("pos.csv", csv_data, "text/csv")},
+        data={"dry_run": "false"},
+    )
+    assert response.status_code == 403
