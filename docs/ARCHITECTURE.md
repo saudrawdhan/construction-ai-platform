@@ -291,7 +291,7 @@ RBAC, which remains the actual authority.
 The suite runs against a real PostgreSQL instance for fidelity, but each test gets its own connection
 and an outer transaction that is rolled back at teardown; the application's own commits become
 savepoints, so nothing persists between tests. Under `TESTING` the mock LLM and hash embedder make
-everything deterministic and offline. This is why the 264-test suite can cover real database
+everything deterministic and offline. This is why the 279-test suite can cover real database
 behavior, AI workflows, and RBAC without a network call or any cleanup.
 
 ## Notable decisions
@@ -306,3 +306,9 @@ behavior, AI workflows, and RBAC without a network call or any cleanup.
   store, keeps consistency and operations simple.
 - **Deterministic core, generative surface.** Keeping the numbers in code and the prose in the model
   is the single biggest reason the AI output is trustworthy.
+- **Uploaded files live on disk, not in Postgres.** An uploaded document's original bytes are saved
+  under a dedicated volume and referenced from its row by path, rather than stored as a database
+  blob. This is the standard-scale-appropriate answer for a single-server deployment; if the platform
+  ever runs on more than one server at once, that volume would need to become shared/object storage
+  — nothing else in the current architecture is built for multi-server operation either, so this
+  isn't a gap unique to file storage.
