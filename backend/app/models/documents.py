@@ -20,6 +20,8 @@ class Document(Base):
     title: Mapped[str] = mapped_column(String(255))
     doc_date: Mapped[date | None] = mapped_column(Date)
     content_summary: Mapped[str] = mapped_column(Text)
+    storage_path: Mapped[str | None] = mapped_column(String(255))
+    original_filename: Mapped[str | None] = mapped_column(String(255))
 
 
 class GeneratedDocument(Base):

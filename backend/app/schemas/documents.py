@@ -1,6 +1,6 @@
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class DocumentRead(BaseModel):
@@ -12,6 +12,15 @@ class DocumentRead(BaseModel):
     title: str
     doc_date: date | None
     content_summary: str
+    original_filename: str | None = None
+    # Populated from the ORM object but never serialized — the client only ever sees
+    # has_file, never the server's own filesystem path.
+    storage_path: str | None = Field(default=None, exclude=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_file(self) -> bool:
+        return self.storage_path is not None
 
 
 class DocumentUploadResult(BaseModel):

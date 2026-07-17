@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1024
     fastembed_cache_dir: str = "/models"
 
+    # Root directory for saved original-upload files (see app/services/document_ingest.py).
+    # Mounted to a dedicated named volume in docker-compose.yml, not the repo tree.
+    upload_dir: str = "/uploads"
+
     jwt_secret: str = "dev-secret-change-me-in-production-please-32bytes-min"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30

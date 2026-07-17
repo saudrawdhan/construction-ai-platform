@@ -1,6 +1,9 @@
+import asyncio
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 
 from app.api.deps import DbSession
 from app.models import Project, User
@@ -142,3 +145,19 @@ async def get_document(
     if document is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Document not found")
     return DocumentRead.model_validate(document)
+
+
+@router.get("/{document_id}/download")
+async def download_document(document_id: int, db: DbSession, _: CurrentUser) -> FileResponse:
+    document = await document_service.get_document(db, document_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Document not found")
+    if document.storage_path is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="No original file was stored for this document",
+        )
+    path = Path(document.storage_path)
+    if not await asyncio.to_thread(path.is_file):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Stored file is missing")
+    return FileResponse(path, filename=document.original_filename or path.name)

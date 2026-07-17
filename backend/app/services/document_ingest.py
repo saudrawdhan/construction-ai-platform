@@ -1,21 +1,27 @@
 """Ingest an uploaded file into the platform's knowledge base. Text is extracted from PDF,
 Word, or plain-text files, a documents row is recorded, and the body is chunked and embedded
 into document_embeddings — the same store the seeded corpus uses, so an uploaded file becomes
-retrievable through the existing hybrid search and the copilot without any special-casing.
+retrievable through the existing hybrid search and the copilot without any special-casing. The
+original bytes are also saved to disk so the file itself can be downloaded again later.
 """
 
 import asyncio
+import os
+import tempfile
 from datetime import date
 from io import BytesIO
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.models import Document, DocumentEmbedding
 from app.services.chunking import chunk_text
 from app.services.embeddings import EmbeddingClient
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 _TEXT_EXTENSIONS = (".txt", ".md", ".markdown", ".csv", ".log")
+_ALL_EXTENSIONS = (".pdf", ".docx", *_TEXT_EXTENSIONS)
 
 
 class UnsupportedDocument(ValueError):
@@ -24,6 +30,13 @@ class UnsupportedDocument(ValueError):
 
 class EmptyDocument(ValueError):
     """Raised when a supported file yields no extractable text (e.g. a scanned PDF)."""
+
+
+def _extension(filename: str) -> str:
+    ext = Path(filename).suffix.lower()
+    if ext not in _ALL_EXTENSIONS:
+        raise UnsupportedDocument("Unsupported file type. Upload a PDF, DOCX, or text file.")
+    return ext
 
 
 def _extract_pdf(data: bytes) -> str:
@@ -44,15 +57,38 @@ def _extract_docx(data: bytes) -> str:
     return "\n".join(parts)
 
 
-def extract_text(filename: str, data: bytes) -> str:
-    name = filename.lower()
-    if name.endswith(".pdf"):
-        return _extract_pdf(data)
-    if name.endswith(".docx"):
-        return _extract_docx(data)
-    if name.endswith(_TEXT_EXTENSIONS):
-        return data.decode("utf-8", errors="ignore")
-    raise UnsupportedDocument("Unsupported file type. Upload a PDF, DOCX, or text file.")
+def extract_text(ext: str, data: bytes) -> str:
+    if ext == ".pdf":
+        try:
+            return _extract_pdf(data)
+        except Exception as exc:  # pypdf raises PdfReadError/PdfStreamError on malformed input
+            raise UnsupportedDocument("The file's contents could not be read as a PDF.") from exc
+    if ext == ".docx":
+        try:
+            return _extract_docx(data)
+        except Exception as exc:  # python-docx raises on malformed/non-DOCX input
+            raise UnsupportedDocument(
+                "The file's contents could not be read as a Word document."
+            ) from exc
+    return data.decode("utf-8", errors="ignore")
+
+
+def _upload_root() -> Path:
+    """Root directory original upload files are saved under. Under TESTING this is the
+    container's own ephemeral filesystem, not the real uploads volume — `docker compose run
+    --rm` destroys it along with the container, so test runs never pollute real storage and
+    need no manual cleanup, mirroring how embeddings.py/llm.py branch on TESTING."""
+    if os.environ.get("TESTING"):
+        return Path(tempfile.gettempdir()) / "construction-ai-test-uploads"
+    return Path(get_settings().upload_dir)
+
+
+def _save_upload(document_id: int, ext: str, data: bytes) -> str:
+    root = _upload_root()
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / f"{document_id}{ext}"
+    path.write_bytes(data)
+    return str(path)
 
 
 async def ingest_upload(
@@ -65,12 +101,17 @@ async def ingest_upload(
     filename: str,
     data: bytes,
 ) -> tuple[Document, int, int]:
-    """Extract, persist, chunk, and embed. Returns (document, chunk_count, character_count).
+    """Extract, persist, chunk, embed, and save the original file. Returns
+    (document, chunk_count, character_count).
 
     Parsing runs in a worker thread because pypdf/python-docx are synchronous and a large
-    file would otherwise block the event loop.
+    file would otherwise block the event loop. The original file is written to disk as the
+    LAST step, after the database row and its embeddings are already staged: if that write
+    fails, the exception propagates before the caller's db.commit() ever runs, so the whole
+    request rolls back cleanly with nothing orphaned in the database or on disk.
     """
-    text = (await asyncio.to_thread(extract_text, filename, data)).strip()
+    ext = _extension(filename)
+    text = (await asyncio.to_thread(extract_text, ext, data)).strip()
     if not text:
         raise EmptyDocument("No readable text could be extracted from the file.")
 
@@ -80,9 +121,10 @@ async def ingest_upload(
         title=title,
         doc_date=date.today(),
         content_summary=" ".join(text.split())[:500],
+        original_filename=filename[:255],
     )
     db.add(document)
-    await db.flush()  # assign document.id before referencing it from the chunks
+    await db.flush()  # assign document.id before referencing it from the chunks and file path
 
     chunks = chunk_text(text)
     vectors = await embedder.embed_documents(chunks)
@@ -98,4 +140,6 @@ async def ingest_upload(
                 embedding=vector,
             )
         )
+
+    document.storage_path = await asyncio.to_thread(_save_upload, document.id, ext, data)
     return document, len(chunks), len(text)

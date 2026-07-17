@@ -17,7 +17,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Project
+from app.models import Project, PurchaseRequest, Supplier
 from app.schemas.imports import ImportReport, ImportRowError
 
 MAX_IMPORT_ROWS = 5000
@@ -45,6 +45,67 @@ async def project_code_resolver(db: AsyncSession) -> RowResolver:
             return [f"project_code: unknown project code '{code}'"]
         provided["project_id"] = str(project_id)
         return []
+
+    return resolve
+
+
+def _normalize_key(value: str) -> str:
+    """Lower-case and collapse internal whitespace runs to a single space. A human typing a
+    supplier name from memory into a spreadsheet can fat-finger an extra space (`"Risk  Supplier
+    001"`) as easily as get the casing wrong — `.strip()` alone (already applied when the file is
+    parsed) only catches leading/trailing whitespace, not this. Both callers of this function
+    confirm the real data has no two distinct records that would collide once normalized before
+    relying on it as a lookup key.
+    """
+    return " ".join(value.lower().split())
+
+
+async def purchase_order_resolver(db: AsyncSession) -> RowResolver:
+    """Build a resolver for purchase orders — the one entity with two foreign keys to resolve
+    from a spreadsheet, not just one. Deliberately does NOT take a ``project_code`` column like the
+    other child entities: a purchase request already belongs to exactly one real project, so
+    ``project_id`` is derived from the resolved ``request_no`` instead of asked for separately. That
+    removes a column the importer would otherwise have to get right, and makes a project/request
+    mismatch structurally impossible rather than a validation rule to enforce.
+
+    Matching is case- and internal-whitespace-insensitive on both columns: a value typed from
+    memory into a spreadsheet is realistic human input, not a system-generated value copied
+    verbatim, so neither a casing mismatch nor a stray extra space should produce a false "unknown"
+    rejection. Confirmed safe against the real data before relying on it — no two request numbers
+    or supplier names collide once normalized, so this lookup can never conflate two different real
+    records.
+    """
+    pr_rows = await db.execute(
+        select(PurchaseRequest.request_no, PurchaseRequest.id, PurchaseRequest.project_id)
+    )
+    request_no_to_ids = {
+        _normalize_key(no): (pr_id, project_id) for no, pr_id, project_id in pr_rows.all()
+    }
+    supplier_rows = await db.execute(select(Supplier.supplier_name, Supplier.id))
+    supplier_to_id = {_normalize_key(name): sid for name, sid in supplier_rows.all()}
+
+    def resolve(provided: dict[str, str]) -> list[str]:
+        errors: list[str] = []
+
+        request_no = provided.pop("request_no", "")
+        if not request_no:
+            errors.append("request_no: this field is required")
+        elif _normalize_key(request_no) not in request_no_to_ids:
+            errors.append(f"request_no: unknown purchase request '{request_no}'")
+        else:
+            pr_id, project_id = request_no_to_ids[_normalize_key(request_no)]
+            provided["pr_id"] = str(pr_id)
+            provided["project_id"] = str(project_id)
+
+        supplier_name = provided.pop("supplier_name", "")
+        if not supplier_name:
+            errors.append("supplier_name: this field is required")
+        elif _normalize_key(supplier_name) not in supplier_to_id:
+            errors.append(f"supplier_name: unknown supplier '{supplier_name}'")
+        else:
+            provided["supplier_id"] = str(supplier_to_id[_normalize_key(supplier_name)])
+
+        return errors
 
     return resolve
 

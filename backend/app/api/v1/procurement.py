@@ -44,6 +44,12 @@ PURCHASE_REQUEST_TEMPLATE = (
     "PRJ-0100,PR-001,Steel,Grade 60 rebar 16mm,2026-03-01\n"
 )
 
+PURCHASE_ORDER_TEMPLATE = (
+    "request_no,supplier_name,po_number,issue_date,promised_delivery,actual_delivery,status,"
+    "delay_root_cause\n"
+    "PR-001,Al-Rashid Steel Trading,PO-001,2026-03-05,2026-03-20,,Issued,\n"
+)
+
 
 @router.post("/purchase-requests/analyze", response_model=PurchaseRequestReview)
 async def analyze_purchase_request(
@@ -105,6 +111,33 @@ async def create_purchase_order(
     await db.commit()
     await db.refresh(order)
     return PurchaseOrderRead.model_validate(order)
+
+
+@router.get("/purchase-orders/import/template")
+async def purchase_order_import_template(_: ProcurementRoles) -> Response:
+    return Response(
+        content=PURCHASE_ORDER_TEMPLATE,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=purchase_orders_template.csv"},
+    )
+
+
+@router.post("/purchase-orders/import", response_model=ImportReport)
+async def import_purchase_orders(
+    db: DbSession,
+    _: ProcurementRoles,
+    file: Annotated[UploadFile, File()],
+    dry_run: Annotated[bool, Form()] = False,
+) -> ImportReport:
+    resolve = await imports_service.purchase_order_resolver(db)
+    return await handle_tabular_import(
+        db,
+        file,
+        dry_run,
+        schema=PurchaseOrderCreate,
+        create=procurement_service.create_purchase_order,
+        resolve=resolve,
+    )
 
 
 @router.get("/purchase-requests", response_model=Page[PurchaseRequestRead])
