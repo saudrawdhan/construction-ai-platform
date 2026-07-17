@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Search, Upload, FileText } from "lucide-react";
+import { Search, Upload, FileText, Download } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { date } from "../lib/format";
+import ProjectPicker from "../components/ProjectPicker";
 import {
   Badge,
   Button,
@@ -28,6 +29,8 @@ interface Document {
   title: string;
   doc_date: string | null;
   content_summary: string;
+  original_filename: string | null;
+  has_file: boolean;
 }
 interface ProjectOption {
   id: number;
@@ -215,14 +218,9 @@ function SearchTab({ projects }: { projects: ProjectOption[] }) {
           />
         </Field>
         <Field label="Project">
-          <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">All projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.project_name}
-              </option>
-            ))}
-          </Select>
+          <div className="w-56">
+            <ProjectPicker projects={projects} value={projectId} onChange={setProjectId} />
+          </div>
         </Field>
         <Button type="submit" disabled={busy || q.trim().length < 2}>
           <Search size={15} /> {busy ? "Searching…" : "Search"}
@@ -294,14 +292,13 @@ function UploadTab({ projects }: { projects: ProjectOption[] }) {
       <form onSubmit={submit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Project">
-            <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">Select a project…</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.project_name}
-                </option>
-              ))}
-            </Select>
+            <ProjectPicker
+              projects={projects}
+              value={projectId}
+              onChange={setProjectId}
+              placeholder="Select a project…"
+              required
+            />
           </Field>
           <Field label="Document type">
             <Input value={docType} onChange={(e) => setDocType(e.target.value)} placeholder="uploaded" />
@@ -343,6 +340,7 @@ function BrowseTab({ projects }: { projects: ProjectOption[] }) {
   const [error, setError] = useState<string>();
   const [page, setPage] = useState(1);
   const [projectFilter, setProjectFilter] = useState("");
+  const [downloadingId, setDownloadingId] = useState<number>();
 
   const projectName = (id: number) => projects.find((p) => p.id === id)?.project_name ?? `#${id}`;
 
@@ -353,6 +351,18 @@ function BrowseTab({ projects }: { projects: ProjectOption[] }) {
     api.get<Page<Document>>(`/documents?${params}`).then(setData).catch((e) => setError(e.message));
   }, [page, projectFilter]);
 
+  async function downloadDocument(d: Document) {
+    setError(undefined);
+    setDownloadingId(d.id);
+    try {
+      await api.download(`/documents/${d.id}/download`, d.original_filename ?? d.title);
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setDownloadingId(undefined);
+    }
+  }
+
   if (!data && error) return <div className="text-sm text-red-600">{error}</div>;
   if (!data) return <Spinner />;
 
@@ -360,24 +370,21 @@ function BrowseTab({ projects }: { projects: ProjectOption[] }) {
     <>
       <FilterBar>
         <Field label="Project">
-          <Select
-            value={projectFilter}
-            onChange={(e) => {
-              setProjectFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.project_name}
-              </option>
-            ))}
-          </Select>
+          <div className="w-56">
+            <ProjectPicker
+              projects={projects}
+              value={projectFilter}
+              onChange={(v) => {
+                setProjectFilter(v);
+                setPage(1);
+              }}
+            />
+          </div>
         </Field>
       </FilterBar>
+      {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
       <Card>
-        <Table head={["Title", "Type", "Project", "Date"]}>
+        <Table head={["Title", "Type", "Project", "Date", ""]}>
           {data.items.map((d) => (
             <tr key={d.id} className="hover:bg-slate-50">
               <td className="px-4 py-3">
@@ -392,6 +399,17 @@ function BrowseTab({ projects }: { projects: ProjectOption[] }) {
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-slate-600">{projectName(d.project_id)}</td>
               <td className="whitespace-nowrap px-4 py-3 text-slate-600">{date(d.doc_date)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-right">
+                {d.has_file && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => downloadDocument(d)}
+                    disabled={downloadingId === d.id}
+                  >
+                    <Download size={14} /> {downloadingId === d.id ? "Downloading…" : "Download"}
+                  </Button>
+                )}
+              </td>
             </tr>
           ))}
         </Table>

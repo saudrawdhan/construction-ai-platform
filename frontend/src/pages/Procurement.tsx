@@ -27,6 +27,7 @@ import ImportModal from "../components/ImportModal";
 import CreateModal from "../components/CreateModal";
 import RowActions from "../components/RowActions";
 import RequestApprovalButton from "../components/RequestApprovalButton";
+import ProjectPicker from "../components/ProjectPicker";
 
 const MATERIAL_CATEGORIES = [
   "Civil", "Concrete", "Steel", "MEP", "Electrical", "Plumbing", "HVAC", "Facade", "Finishing", "Safety",
@@ -356,6 +357,7 @@ function Orders() {
   const [page, setPage] = useState(1);
   const [lateOnly, setLateOnly] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
@@ -385,9 +387,14 @@ function Orders() {
           Late deliveries only
         </label>
         {canManage && (
-          <Button onClick={() => setShowForm(true)}>
-            <Plus size={16} /> New Order
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => setShowImport(true)}>
+              <Upload size={16} /> Import
+            </Button>
+            <Button onClick={() => setShowForm(true)}>
+              <Plus size={16} /> New Order
+            </Button>
+          </>
         )}
       </FilterBar>
       <Card>
@@ -440,6 +447,20 @@ function Orders() {
           onClose={() => setShowForm(false)}
           onCreated={() => {
             setShowForm(false);
+            setPage(1);
+            setRefresh((r) => r + 1);
+          }}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          title="Import Purchase Orders"
+          importPath="/procurement/purchase-orders/import"
+          templatePath="/procurement/purchase-orders/import/template"
+          templateFilename="purchase_orders_template.csv"
+          onClose={() => setShowImport(false)}
+          onImported={() => {
             setPage(1);
             setRefresh((r) => r + 1);
           }}
@@ -529,14 +550,13 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
     <Modal title="New Purchase Order" onClose={onClose}>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
         <Field label="Project">
-          <Select required value={form.project_id} onChange={(e) => set("project_id", e.target.value)}>
-            <option value="">Select a project…</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.project_name}
-              </option>
-            ))}
-          </Select>
+          <ProjectPicker
+            projects={projects}
+            value={form.project_id}
+            onChange={(v) => set("project_id", v)}
+            placeholder="Select a project…"
+            required
+          />
         </Field>
         <Field label="Purchase request">
           <Select

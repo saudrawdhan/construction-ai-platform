@@ -4,6 +4,7 @@ import { api, ApiError, type Page } from "../lib/api";
 import CreateModal from "../components/CreateModal";
 import ImportModal from "../components/ImportModal";
 import RowActions from "../components/RowActions";
+import ProjectPicker from "../components/ProjectPicker";
 import { useAuth } from "../lib/auth";
 import { date } from "../lib/format";
 import {
@@ -127,20 +128,16 @@ export default function Meetings() {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <FilterBar>
           <Field label="Project">
-            <Select
-              value={projectFilter}
-              onChange={(e) => {
-                setProjectFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">All projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.project_name}
-                </option>
-              ))}
-            </Select>
+            <div className="w-56">
+              <ProjectPicker
+                projects={projects}
+                value={projectFilter}
+                onChange={(v) => {
+                  setProjectFilter(v);
+                  setPage(1);
+                }}
+              />
+            </div>
           </Field>
         </FilterBar>
         {canSummarize && (
@@ -327,14 +324,13 @@ function SummarizeModal({ projects, onClose }: { projects: ProjectOption[]; onCl
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Project">
-            <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">Select a project…</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.project_name}
-                </option>
-              ))}
-            </Select>
+            <ProjectPicker
+              projects={projects}
+              value={projectId}
+              onChange={setProjectId}
+              placeholder="Select a project…"
+              required
+            />
           </Field>
           <Field label="Meeting Type">
             <Select value={meetingType} onChange={(e) => setMeetingType(e.target.value)}>

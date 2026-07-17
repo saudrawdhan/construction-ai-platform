@@ -28,10 +28,10 @@ import {
   ErrorBox,
   EmptyState,
   Field,
-  Select,
   Modal,
   Pagination,
 } from "../components/ui";
+import ProjectPicker from "../components/ProjectPicker";
 
 interface ProjectOption {
   id: number;
@@ -470,14 +470,14 @@ export default function Agent() {
 
           <form onSubmit={runAgent} className="mt-3 flex flex-wrap items-end gap-2">
             <Field label="Project (optional)">
-              <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-                <option value="">Whole portfolio</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.project_name}
-                  </option>
-                ))}
-              </Select>
+              <div className="w-56">
+                <ProjectPicker
+                  projects={projects}
+                  value={projectId}
+                  onChange={setProjectId}
+                  placeholder="Whole portfolio"
+                />
+              </div>
             </Field>
             <input
               value={goal}

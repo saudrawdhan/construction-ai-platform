@@ -8,9 +8,9 @@ import {
   Field,
   PageHeader,
   ProviderTag,
-  Select,
   StatCard,
 } from "../components/ui";
+import ProjectPicker from "../components/ProjectPicker";
 
 interface ProjectOption {
   id: number;
@@ -75,14 +75,14 @@ export default function Reports() {
         <Card className="mb-6 p-5">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Scope">
-              <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-                <option value="">Whole portfolio</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.project_name}
-                  </option>
-                ))}
-              </Select>
+              <div className="w-56">
+                <ProjectPicker
+                  projects={projects}
+                  value={projectId}
+                  onChange={setProjectId}
+                  placeholder="Whole portfolio"
+                />
+              </div>
             </Field>
             <label className="flex h-10 items-center gap-2 text-sm text-slate-600">
               <input

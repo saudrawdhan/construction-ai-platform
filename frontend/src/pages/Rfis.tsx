@@ -15,7 +15,6 @@ import {
   PageHeader,
   Pagination,
   ProviderTag,
-  Select,
   Spinner,
   Table,
   statusTone,
@@ -23,6 +22,7 @@ import {
 import CreateModal from "../components/CreateModal";
 import ImportModal from "../components/ImportModal";
 import RowActions from "../components/RowActions";
+import ProjectPicker from "../components/ProjectPicker";
 import RequestApprovalButton from "../components/RequestApprovalButton";
 
 const RFI_FIELDS = [
@@ -141,20 +141,16 @@ export default function Rfis() {
 
       <FilterBar>
         <Field label="Project">
-          <Select
-            value={projectId}
-            onChange={(e) => {
-              setProjectId(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.project_name}
-              </option>
-            ))}
-          </Select>
+          <div className="w-56">
+            <ProjectPicker
+              projects={projects}
+              value={projectId}
+              onChange={(v) => {
+                setProjectId(v);
+                setPage(1);
+              }}
+            />
+          </div>
         </Field>
         <label className="flex h-10 items-center gap-2 text-sm text-slate-600">
           <input

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { Button, ErrorBox, Field, Input, Modal, Select, Textarea } from "./ui";
+import ProjectPicker from "./ProjectPicker";
 
 export interface FormField {
   name: string;
@@ -98,18 +99,13 @@ export default function CreateModal({
           <div key={f.name} className={f.type === "textarea" || f.full ? "sm:col-span-2" : ""}>
             <Field label={f.label}>
               {f.type === "project" ? (
-                <Select
+                <ProjectPicker
                   required={f.required}
                   value={form[f.name]}
-                  onChange={(e) => set(f.name, e.target.value)}
-                >
-                  <option value="">Select a project…</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.project_name}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(v) => set(f.name, v)}
+                  placeholder="Select a project…"
+                  projects={projects}
+                />
               ) : f.type === "select" ? (
                 <Select value={form[f.name]} onChange={(e) => set(f.name, e.target.value)}>
                   {/* When editing, the record's current value may not be one of the curated
