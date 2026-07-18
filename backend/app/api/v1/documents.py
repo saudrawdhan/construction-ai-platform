@@ -161,3 +161,11 @@ async def download_document(document_id: int, db: DbSession, _: CurrentUser) -> 
     if not await asyncio.to_thread(path.is_file):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Stored file is missing")
     return FileResponse(path, filename=document.original_filename or path.name)
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(document_id: int, db: DbSession, _: UploadRoles) -> None:
+    deleted = await document_service.delete_document(db, document_id)
+    if deleted is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Document not found")
+    await db.commit()

@@ -7,7 +7,7 @@ human approves. Every decision is written to approval_history and notifies the r
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AiAuditLog, ApprovalHistory, ApprovalRequest, Notification
@@ -72,10 +72,28 @@ async def get_history(db: AsyncSession, approval_id: int) -> list[ApprovalHistor
 
 async def resolve_approval(
     db: AsyncSession, approval: ApprovalRequest, *, decision: str, actor: str, note: str | None
-) -> ApprovalRequest:
-    approval.status = decision
-    approval.resolved_by = actor
-    approval.resolved_at = datetime.now(UTC)
+) -> bool:
+    """Atomically move a pending approval to its decision and record the history + notification.
+
+    The pending -> decided transition is a single conditional UPDATE (``WHERE status = 'pending'``)
+    rather than a read-check-write on the ORM object: a router-level ``if status != "pending"``
+    check has a time-of-check/time-of-use gap under which two concurrent approvers could both pass
+    the check and both resolve the same request. The UPDATE's row count is the authority — exactly
+    one caller can flip a pending row, so only that caller writes the history entry and notifies the
+    requester. Returns True if this call performed the transition, False if it lost the race (the
+    row was no longer pending) — the caller maps False to a 409.
+    """
+    resolved_at = datetime.now(UTC)
+    result = await db.execute(
+        update(ApprovalRequest)
+        .where(ApprovalRequest.id == approval.id, ApprovalRequest.status == "pending")
+        .values(status=decision, resolved_by=actor, resolved_at=resolved_at)
+    )
+    if result.rowcount == 0:
+        return False
+    # The UPDATE above is the only write to the approval row; the caller refreshes the instance
+    # after commit to pick up the new state, so it is deliberately not mutated here (mutating it
+    # would make the ORM flush a second, redundant UPDATE of the same values).
     db.add(
         ApprovalHistory(
             approval_request_id=approval.id, actor=actor, action=decision, note=note
@@ -92,7 +110,7 @@ async def resolve_approval(
             category="approval",
         )
     )
-    return approval
+    return True
 
 
 async def list_notifications(

@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from fastapi import HTTPException
 
@@ -114,3 +116,61 @@ async def test_rate_limiter_falls_back_to_ip_without_a_token(monkeypatch):
     await dependency(request)
     with pytest.raises(HTTPException):
         await dependency(request)
+
+
+async def test_oversized_value_returns_422_not_500(client, admin_headers):
+    # A project_code longer than the column (varchar(50)) is a client mistake, not a server
+    # fault: it must come back as a clean 422, never a raw 500 (SQLSTATE class 22 data error).
+    payload = {
+        "project_code": "Z" * 60,
+        "project_name": "Oversized",
+        "project_type": "Tower",
+        "client_name": "Client",
+        "city": "Riyadh",
+        "status": "Planned",
+        "budget": "1000000.00",
+    }
+    response = await client.post("/api/v1/projects", json=payload, headers=admin_headers)
+    assert response.status_code == 422
+
+
+async def test_numeric_overflow_returns_422_not_500(client, admin_headers):
+    payload = {
+        "project_code": f"OVF-{uuid.uuid4().hex[:8]}",
+        "project_name": "Overflow",
+        "project_type": "Tower",
+        "client_name": "Client",
+        "city": "Riyadh",
+        "status": "Planned",
+        "budget": "1" + "0" * 20,  # far beyond numeric(16, 2)
+    }
+    response = await client.post("/api/v1/projects", json=payload, headers=admin_headers)
+    assert response.status_code == 422
+
+
+async def test_dbapi_handler_reraises_non_data_errors():
+    # SQLSTATE class 22 = data exception (client) -> 422; anything else is a real server fault
+    # and must propagate (500 + logged), never be masked as a client error.
+    from sqlalchemy.exc import DBAPIError
+
+    from app.main import dbapi_error_handler
+
+    class _Orig(Exception):
+        sqlstate = "22001"
+
+    data_exc = DBAPIError.instance(
+        statement="x", params=None, orig=_Orig(), dbapi_base_err=Exception
+    )
+    data_exc.orig.sqlstate = "22001"
+    response = await dbapi_error_handler(None, data_exc)
+    assert response.status_code == 422
+
+    class _ServerOrig(Exception):
+        sqlstate = "42P01"  # undefined_table — a genuine programming/server error
+
+    server_exc = DBAPIError.instance(
+        statement="x", params=None, orig=_ServerOrig(), dbapi_base_err=Exception
+    )
+    server_exc.orig.sqlstate = "42P01"
+    with pytest.raises(DBAPIError):
+        await dbapi_error_handler(None, server_exc)

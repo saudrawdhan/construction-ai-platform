@@ -193,3 +193,99 @@ async def test_download_seeded_document_with_no_stored_file_returns_404(client, 
     response = await client.get("/api/v1/documents/1/download", headers=admin_headers)
     assert response.status_code == 404
     assert response.json()["detail"] == "No original file was stored for this document"
+
+
+async def test_download_when_storage_path_points_to_a_missing_file_returns_404(
+    client, admin_headers, db_session
+):
+    # The third distinct 404 branch: a document that HAS a storage_path on record, but the file
+    # is gone from disk (e.g. the volume was wiped or restored from a DB-only backup). The
+    # endpoint must detect this and return a clean, specific 404 — not an unhandled FileResponse
+    # error on a nonexistent path.
+    from app.models import Document
+
+    doc = Document(
+        project_id=1, doc_type="uploaded", title="Ghost document",
+        content_summary="placeholder", doc_date=None,
+        storage_path="/uploads/definitely-does-not-exist-999999.txt",
+        original_filename="ghost.txt",
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    response = await client.get(f"/api/v1/documents/{doc.id}/download", headers=admin_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Stored file is missing"
+
+
+async def test_delete_document_removes_row_chunks_and_file(client, admin_headers, db_session):
+    from sqlalchemy import func, select
+
+    from app.models import DocumentEmbedding
+
+    upload = await client.post(
+        "/api/v1/documents/upload",
+        headers=admin_headers,
+        files={"file": ("to-delete.txt", CONTENT, "text/plain")},
+        data={"project_id": "1"},
+    )
+    document_id = upload.json()["document_id"]
+
+    async def chunk_count() -> int:
+        return await db_session.scalar(
+            select(func.count())
+            .select_from(DocumentEmbedding)
+            .where(
+                DocumentEmbedding.source_type == "document",
+                DocumentEmbedding.source_id == document_id,
+            )
+        )
+
+    assert await chunk_count() >= 1  # the upload created at least one indexed chunk
+
+    deleted = await client.delete(f"/api/v1/documents/{document_id}", headers=admin_headers)
+    assert deleted.status_code == 204
+
+    gone = await client.get(f"/api/v1/documents/{document_id}", headers=admin_headers)
+    assert gone.status_code == 404
+
+    assert await chunk_count() == 0  # its indexed chunks are gone too, not orphaned
+
+
+async def test_delete_unknown_document_returns_404(client, admin_headers):
+    response = await client.delete("/api/v1/documents/999999", headers=admin_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document not found"
+
+
+async def test_delete_document_forbidden_for_viewer(client, admin_headers, viewer_headers):
+    upload = await client.post(
+        "/api/v1/documents/upload",
+        headers=admin_headers,
+        files={"file": ("viewer-cannot-delete.txt", CONTENT, "text/plain")},
+        data={"project_id": "1"},
+    )
+    document_id = upload.json()["document_id"]
+    response = await client.delete(
+        f"/api/v1/documents/{document_id}", headers=viewer_headers
+    )
+    assert response.status_code == 403
+
+
+async def test_delete_document_still_cited_as_claim_evidence_returns_409(
+    client, admin_headers, db_session
+):
+    from sqlalchemy import select
+
+    from app.models import ClaimEvidence
+
+    # A document referenced by the claim-evidence chain must not be deletable — the FK rejects
+    # it and the app's global handler returns a clean 409, the same FK-safe behavior every other
+    # entity delete uses, rather than silently orphaning the evidence link.
+    evidence = await db_session.scalar(select(ClaimEvidence).limit(1))
+    assert evidence is not None, "seed data must include claim evidence"
+
+    response = await client.delete(
+        f"/api/v1/documents/{evidence.document_id}", headers=admin_headers
+    )
+    assert response.status_code == 409

@@ -181,6 +181,29 @@ async def test_import_rfis_resolves_project_code(client, admin_headers):
     assert await _rfi_total(client, admin_headers) == before + 1
 
 
+async def test_import_project_code_is_case_insensitive(client, admin_headers):
+    # A project code typed into a spreadsheet is human input: "prj-0001" must resolve the same as
+    # "PRJ-0001", matching the purchase-order importer's normalization. A genuinely unknown code
+    # is still rejected.
+    code = await _first_project_code(client, admin_headers)
+    csv_data = (
+        "project_code,rfi_number,subject,question,discipline,raised_by,assigned_to\n"
+        f"{code.lower()},RFI-CI-1,Case test,Confirm,Structural,Eng A,Eng B\n"
+        "no-such-code,RFI-CI-2,Bad row,No such project,Civil,Eng C,Eng D\n"
+    ).encode()
+    response = await client.post(
+        "/api/v1/rfis/import",
+        headers=admin_headers,
+        files={"file": ("rfis.csv", csv_data, "text/csv")},
+        data={"dry_run": "true"},
+    )
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert report["valid_rows"] == 1  # the lower-cased code resolved
+    assert report["invalid_rows"] == 1
+    assert "unknown project code 'no-such-code'" in report["errors"][0]["errors"][0]
+
+
 async def test_import_child_missing_project_code_is_row_error(client, admin_headers):
     code = await _first_project_code(client, admin_headers)
     # Second row omits project_code entirely -> reported, not a 500.

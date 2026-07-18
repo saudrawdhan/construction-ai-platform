@@ -1,6 +1,7 @@
 from sqlalchemy import func, select
 
 from app.models import AiAuditLog, Notification
+from app.services import governance as governance_service
 
 
 async def _create_approval(client, headers, action="send_external_email"):
@@ -111,3 +112,41 @@ async def test_audit_endpoint_lists_ai_calls(client, admin_headers, db_session):
 async def test_audit_endpoint_forbidden_for_viewer(client, viewer_headers):
     response = await client.get("/api/v1/audit/ai-outputs", headers=viewer_headers)
     assert response.status_code == 403
+
+
+async def test_resolve_approval_is_atomic_against_double_resolve(db_session):
+    # Two approvers can both pass the router's "is it still pending?" check before either commits.
+    # The pending -> decided transition must be atomic so only one of them actually resolves the
+    # request: the loser makes no change, records no second decision, and sends no second
+    # notification. (With the old read-check-write on the ORM object, the second call resolved it
+    # again, double-writing history and notifications.)
+    approval = await governance_service.request_approval(
+        db_session, action_type="auto_approve_pr", project_id=1, payload={},
+        risk_level="high", requested_by="test-admin@construction-ops.com",
+    )
+    await db_session.flush()
+
+    first = await governance_service.resolve_approval(
+        db_session, approval, decision="approved", actor="a@construction-ops.com", note=None
+    )
+    second = await governance_service.resolve_approval(
+        db_session, approval, decision="rejected", actor="b@construction-ops.com", note=None
+    )
+
+    assert first is True
+    assert second is False  # the race loser changes nothing
+
+    await db_session.refresh(approval)
+    assert approval.status == "approved"  # the first decision stands
+
+    history = await governance_service.get_history(db_session, approval.id)
+    decisions = [h for h in history if h.action in ("approved", "rejected")]
+    assert len(decisions) == 1
+    assert decisions[0].action == "approved"
+
+    notifications = (
+        await db_session.scalars(
+            select(Notification).where(Notification.project_id == approval.project_id)
+        )
+    ).all()
+    assert len(notifications) == 1  # only the winner notifies the requester

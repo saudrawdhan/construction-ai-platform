@@ -168,9 +168,39 @@ def _resolve_args(
     return out
 
 
+# The entity a reused skill acts on is a supplier or a purchase request named in the goal. Taking
+# the FIRST number in the goal is wrong whenever a non-entity number comes first — a project number
+# ("for project 12, assess supplier 3") or a year ("in 2026, how risky is supplier 7") was silently
+# read as the entity id, acting on the wrong record with a plausible-looking answer. Prefer a number
+# written right after an entity word (that IS the entity, even a 4-digit purchase-request id); only
+# if none is present fall back to the first number that is neither a project reference (project_id
+# is supplied separately) nor a bare 4-digit year.
+_ENTITY_ADJACENT = re.compile(
+    r"(?:suppliers?|vendors?|مورد|purchase\s+requests?|\bp\.?r\.?|\brequests?)"
+    r"[\s#:.\-]*(?:no\.?|number|رقم)?[\s#:.\-]*(\d+)",
+    re.IGNORECASE,
+)
+_PROJECT_PREFIX = re.compile(
+    r"(?:projects?|مشروع)[\s#:.\-]*(?:no\.?|number|رقم)?[\s#:.\-]*$", re.IGNORECASE
+)
+
+
+def _entity_id_from_goal(goal: str) -> int | None:
+    adjacent = _ENTITY_ADJACENT.search(goal)
+    if adjacent is not None:
+        return int(adjacent.group(1))
+    for match in re.finditer(r"\d+", goal):
+        num = match.group()
+        if _PROJECT_PREFIX.search(goal[max(0, match.start() - 20):match.start()]):
+            continue
+        if len(num) == 4 and 1900 <= int(num) <= 2100:
+            continue
+        return int(num)
+    return None
+
+
 def _resolve_params(skill: AgentSkill, goal: str, project_id: int | None) -> dict | None:
-    ids = re.findall(r"\d+", goal)
-    entity_id = int(ids[0]) if ids else None
+    entity_id = _entity_id_from_goal(goal)
     for param in skill.parameters or []:
         if param == "project_id" and project_id is None:
             return None

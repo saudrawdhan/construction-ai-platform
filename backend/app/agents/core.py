@@ -67,7 +67,17 @@ _GROUNDING_TOOLS = {"search_memory", "search_documents", "recall_past_sessions"}
 # pr_review.py. get_safety_events carries the same risk in a different shape (a specific
 # severity or date being misstated while narrating a list) and is held to the same standard —
 # safety data deserves no less protection from synthesis distortion than financial data.
-_SELF_NARRATING_TOOLS = {"get_claims", "get_change_orders", "get_safety_events"}
+#
+# The human-readable label is used ONLY to tell the narrator, in words and never with the figures,
+# what is already shown verbatim in a mixed-trajectory answer. The set of protected tools is
+# derived from this map so the two can never drift apart — adding a tool here is the single edit
+# that both protects it and gives the narrator a word for it, with no second list to forget.
+_SELF_NARRATING_LABELS = {
+    "get_claims": "claims",
+    "get_change_orders": "change orders",
+    "get_safety_events": "safety events",
+}
+_SELF_NARRATING_TOOLS = frozenset(_SELF_NARRATING_LABELS)
 
 
 class ConstructionAgent:
@@ -177,19 +187,19 @@ class ConstructionAgent:
                     sources.extend(result.sources)
 
         # When the real planner itself decides to stop, its "final" action already carries an
-        # `answer` it wrote — which bypasses `_synthesize` entirely, including its self-
-        # narrating-tools override, since `final_answer` is already non-None below. A live test
-        # proved this matters: the planner's own final answer garbled a multi-record financial
-        # total exactly the way `_synthesize`'s LLM path did, so the same override must apply
-        # here too, taking precedence over whatever the planner already wrote.
+        # `answer` it wrote — which would otherwise bypass `_synthesize` entirely, since
+        # `final_answer` is already non-None below. A live test proved this matters: the
+        # planner's own final answer garbled a multi-record financial total exactly the way an
+        # LLM synthesis pass does. So whenever a self-narrating tool ran (whose exact figures
+        # must never be re-narrated), the answer is (re)built by `_synthesize` — which now emits
+        # those figures verbatim for a pure OR a mixed trajectory — taking precedence over
+        # whatever free-text answer the planner already wrote. When no self-narrating tool ran,
+        # the planner's own answer (or a normal synthesis if it wrote none) is used as before.
         substantive = [s for s in steps if s["tool"] not in _GROUNDING_TOOLS]
-        if (
-            self.provider != "mock"
-            and substantive
-            and all(s["tool"] in _SELF_NARRATING_TOOLS for s in substantive)
-        ):
-            final_answer = "\n\n".join(s["observation"] for s in substantive)
-        elif final_answer is None:
+        has_self_narrating = self.provider != "mock" and any(
+            s["tool"] in _SELF_NARRATING_TOOLS for s in substantive
+        )
+        if final_answer is None or has_self_narrating:
             final_answer = await self._synthesize(goal, steps, history)
 
         if reused is None and use_skills and status == "completed" and len(steps) >= 2:
@@ -482,19 +492,62 @@ class ConstructionAgent:
         if not steps:
             return "No tools were run, so there is no evidence to answer this goal."
         substantive = [s for s in steps if s["tool"] not in _GROUNDING_TOOLS]
-        if (
-            self.provider != "mock"
-            and substantive
-            and all(s["tool"] in _SELF_NARRATING_TOOLS for s in substantive)
-        ):
-            return "\n\n".join(s["observation"] for s in substantive)
+        self_narrating = [s for s in substantive if s["tool"] in _SELF_NARRATING_TOOLS]
+        if self.provider != "mock" and self_narrating:
+            # A self-narrating tool's observation already IS the exact, deterministically
+            # computed answer for its records; emit it verbatim so no LLM ever re-narrates
+            # (and garbles) the figures.
+            verbatim = "\n\n".join(s["observation"] for s in self_narrating)
+            if len(self_narrating) == len(substantive):
+                # Every substantive step is self-narrating — nothing else to narrate. This is
+                # the original, all-or-nothing protected case, unchanged.
+                return verbatim
+            # Mixed trajectory: a self-narrating tool ran ALONGSIDE a genuinely analytical one.
+            # Narrate ONLY the non-self-narrating evidence — the model never even sees the exact
+            # figures, so it cannot distort them — then append them verbatim as the authoritative
+            # record. This closes the previously-disclosed gap where any such mix sent the exact
+            # figures back through full LLM synthesis. The narrator is told, in words only, which
+            # record types are already being reported verbatim below, so it addresses the rest of
+            # the goal instead of mislabeling the analytical evidence under a "claims" heading —
+            # it is still never shown the figures themselves.
+            covered = sorted({
+                _SELF_NARRATING_LABELS[s["tool"]] for s in self_narrating
+            })
+            # A live test on safety data found the weaker phrasing was not enough: told the
+            # figures were shown separately, the model still asserted "No safety events are
+            # recorded" directly above a verbatim list of five — inventing an ABSENCE of the data
+            # it was not given. The note therefore forbids any statement about those records'
+            # existence at all, not just restating their values, since a wrong "none found" next
+            # to real high-severity records is as harmful as a wrong figure.
+            covered_note = (
+                f"IMPORTANT: the {' and '.join(covered)} for this goal have ALREADY been fully "
+                "answered by another part of the system and are shown to the user in full, "
+                "exactly, immediately after your text — that part of the goal is done. Write "
+                "nothing about it: do not list, count, total, summarize, describe, or characterize "
+                "those records, and do NOT state whether any exist, are missing, or none are "
+                "found — you have not been given them, so any claim you make about them would be "
+                "wrong. Answer ONLY the remaining part(s) of the goal, from the evidence below."
+            )
+            narratable = [s for s in steps if s["tool"] not in _SELF_NARRATING_TOOLS]
+            narration = await self._narrate(goal, narratable, history, covered_note=covered_note)
+            return f"{narration}\n\n{verbatim}"
+        return await self._narrate(goal, steps, history)
+
+    async def _narrate(
+        self, goal: str, steps: list[dict], history: str = "", *, covered_note: str = ""
+    ) -> str:
+        """LLM (or, in mock mode, deterministic) narration over a set of tool observations.
+        Callers protecting self-narrating figures filter those steps out before calling this,
+        so the model is never shown a pre-computed figure it could re-narrate incorrectly;
+        ``covered_note`` tells it, in words only, what is being reported verbatim elsewhere."""
         observations = "\n\n".join(f"[{s['tool']}] {s['observation']}" for s in steps)
         if self.provider == "mock":
             joined = "; ".join(s["observation"].replace("\n", " ")[:160] for s in steps)
             return f"Based on {len(steps)} tool result(s): {joined}"
         history_block = f"Earlier in this conversation:\n{history}\n\n" if history else ""
+        covered_block = f"{covered_note}\n\n" if covered_note else ""
         user = (
-            f"{history_block}Goal: {goal}\n\nTool observations:\n{observations}\n\n"
+            f"{history_block}Goal: {goal}\n\n{covered_block}Tool observations:\n{observations}\n\n"
             "Write a concise, grounded management answer citing what the evidence shows. "
             "If the goal refers back to something from earlier in the conversation, resolve it "
             "explicitly (name the project or record) rather than leaving it ambiguous. "

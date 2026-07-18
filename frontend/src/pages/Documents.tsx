@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Search, Upload, FileText, Download } from "lucide-react";
+import { Search, Upload, FileText, Download, Trash2 } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { date } from "../lib/format";
@@ -90,7 +90,7 @@ export default function Documents() {
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
       {tab === "search" && <SearchTab projects={projects} />}
       {tab === "upload" && canUpload && <UploadTab projects={projects} />}
-      {tab === "browse" && <BrowseTab projects={projects} />}
+      {tab === "browse" && <BrowseTab projects={projects} canManage={canUpload} />}
       {tab === "generated" && <GeneratedTab projects={projects} />}
     </div>
   );
@@ -335,12 +335,15 @@ function UploadTab({ projects }: { projects: ProjectOption[] }) {
   );
 }
 
-function BrowseTab({ projects }: { projects: ProjectOption[] }) {
+function BrowseTab({ projects, canManage }: { projects: ProjectOption[]; canManage: boolean }) {
   const [data, setData] = useState<Page<Document>>();
   const [error, setError] = useState<string>();
   const [page, setPage] = useState(1);
   const [projectFilter, setProjectFilter] = useState("");
   const [downloadingId, setDownloadingId] = useState<number>();
+  const [confirmDelete, setConfirmDelete] = useState<Document>();
+  const [deleting, setDeleting] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const projectName = (id: number) => projects.find((p) => p.id === id)?.project_name ?? `#${id}`;
 
@@ -349,7 +352,7 @@ function BrowseTab({ projects }: { projects: ProjectOption[] }) {
     if (projectFilter) params.set("project_id", projectFilter);
     setError(undefined);
     api.get<Page<Document>>(`/documents?${params}`).then(setData).catch((e) => setError(e.message));
-  }, [page, projectFilter]);
+  }, [page, projectFilter, reloadKey]);
 
   async function downloadDocument(d: Document) {
     setError(undefined);
@@ -360,6 +363,26 @@ function BrowseTab({ projects }: { projects: ProjectOption[] }) {
       setError((e as ApiError).message);
     } finally {
       setDownloadingId(undefined);
+    }
+  }
+
+  async function deleteDocument() {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    setError(undefined);
+    try {
+      await api.del(`/documents/${confirmDelete.id}`);
+      setConfirmDelete(undefined);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      const err = e as ApiError;
+      setError(
+        err.status === 409
+          ? "This document is cited as claim evidence and cannot be deleted."
+          : err.message
+      );
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -400,15 +423,30 @@ function BrowseTab({ projects }: { projects: ProjectOption[] }) {
               <td className="whitespace-nowrap px-4 py-3 text-slate-600">{projectName(d.project_id)}</td>
               <td className="whitespace-nowrap px-4 py-3 text-slate-600">{date(d.doc_date)}</td>
               <td className="whitespace-nowrap px-4 py-3 text-right">
-                {d.has_file && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => downloadDocument(d)}
-                    disabled={downloadingId === d.id}
-                  >
-                    <Download size={14} /> {downloadingId === d.id ? "Downloading…" : "Download"}
-                  </Button>
-                )}
+                <div className="flex items-center justify-end gap-1.5">
+                  {d.has_file && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => downloadDocument(d)}
+                      disabled={downloadingId === d.id}
+                    >
+                      <Download size={14} /> {downloadingId === d.id ? "Downloading…" : "Download"}
+                    </Button>
+                  )}
+                  {canManage && (
+                    <Button
+                      variant="ghost"
+                      className="px-2 text-red-600 hover:bg-red-50"
+                      onClick={() => {
+                        setError(undefined);
+                        setConfirmDelete(d);
+                      }}
+                      aria-label="Delete"
+                    >
+                      <Trash2 size={15} />
+                    </Button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
@@ -416,6 +454,26 @@ function BrowseTab({ projects }: { projects: ProjectOption[] }) {
         {data.items.length === 0 && <EmptyState message="No documents match this filter." />}
         <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
       </Card>
+
+      {confirmDelete && (
+        <Modal title="Delete Document" onClose={() => setConfirmDelete(undefined)}>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              This will permanently delete “{confirmDelete.title}”, its indexed search chunks, and its
+              stored file. This action cannot be undone.
+            </p>
+            {error && <div className="text-sm text-red-600">{error}</div>}
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setConfirmDelete(undefined)}>
+                Cancel
+              </Button>
+              <Button variant="danger" disabled={deleting} onClick={deleteDocument}>
+                {deleting ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

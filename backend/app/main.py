@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.api.v1 import api_router
 from app.config import get_settings
@@ -63,6 +63,24 @@ async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSON
         status_code=409,
         content={"detail": "Request conflicts with an existing record or constraint"},
     )
+
+
+@app.exception_handler(DBAPIError)
+async def dbapi_error_handler(request: Request, exc: DBAPIError) -> JSONResponse:
+    # A value the database itself cannot store — too long for a column, out of numeric range,
+    # or an invalid byte sequence — arrives as SQLSTATE class 22 ("data exception"). That is a
+    # client mistake, not a server fault, so answer with 422 instead of a raw 500. Anything else
+    # (a genuine operational/server error) is re-raised to surface and be logged as a 500.
+    sqlstate = getattr(exc.orig, "sqlstate", None)
+    if isinstance(sqlstate, str) and sqlstate.startswith("22"):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": "A submitted value is invalid for storage "
+                "(too long, out of range, or malformed)."
+            },
+        )
+    raise exc
 
 
 @app.get("/health", tags=["system"])

@@ -94,9 +94,16 @@ async def _resolve(
     resolved = await governance_service.resolve_approval(
         db, approval, decision=decision, actor=user.email, note=note
     )
+    if not resolved:
+        # Lost a concurrent race: another approver flipped this request between the check above
+        # and the atomic UPDATE. Report the resolution that actually won.
+        await db.refresh(approval)
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail=f"Already {approval.status}"
+        )
     await db.commit()
-    await db.refresh(resolved)
-    return ApprovalRead.model_validate(resolved)
+    await db.refresh(approval)
+    return ApprovalRead.model_validate(approval)
 
 
 @router.post("/{approval_id}/approve", response_model=ApprovalRead)

@@ -34,13 +34,17 @@ async def project_code_resolver(db: AsyncSession) -> RowResolver:
     map is loaded once; an unknown code is reported as a row error rather than silently dropped.
     """
     rows = await db.execute(select(Project.project_code, Project.id))
-    code_to_id = {code: pid for code, pid in rows.all()}
+    # Match case- and internal-whitespace-insensitively, exactly like purchase_order_resolver:
+    # a project code typed into a spreadsheet is realistic human input, so "prj-0001" should not
+    # be rejected as unknown when "PRJ-0001" is on file. Confirmed against the real data that no
+    # two project codes collide once normalized, so this lookup can never conflate two projects.
+    code_to_id = {_normalize_key(code): pid for code, pid in rows.all()}
 
     def resolve(provided: dict[str, str]) -> list[str]:
         code = provided.pop("project_code", "")
         if not code:
             return ["project_code: this field is required"]
-        project_id = code_to_id.get(code)
+        project_id = code_to_id.get(_normalize_key(code))
         if project_id is None:
             return [f"project_code: unknown project code '{code}'"]
         provided["project_id"] = str(project_id)
@@ -53,8 +57,8 @@ def _normalize_key(value: str) -> str:
     """Lower-case and collapse internal whitespace runs to a single space. A human typing a
     supplier name from memory into a spreadsheet can fat-finger an extra space (`"Risk  Supplier
     001"`) as easily as get the casing wrong — `.strip()` alone (already applied when the file is
-    parsed) only catches leading/trailing whitespace, not this. Both callers of this function
-    confirm the real data has no two distinct records that would collide once normalized before
+    parsed) only catches leading/trailing whitespace, not this. Every caller of this function
+    confirms the real data has no two distinct records that would collide once normalized before
     relying on it as a lookup key.
     """
     return " ".join(value.lower().split())

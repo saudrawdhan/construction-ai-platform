@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.content_shield import shield
 from app.agents.prompts import CONSTRUCTION_OPS_ASSISTANT
 from app.models import AiMemory, DocumentEmbedding
 from app.schemas.copilot import CopilotSource
@@ -104,7 +105,9 @@ class ConstructionCopilot:
         if memory_ids:
             rows = await db.scalars(select(AiMemory).where(AiMemory.id.in_(memory_ids)))
             for memory in rows:
-                evidence.append(f"[MEMORY · {memory.category}] {memory.summary}")
+                # Shield retrieved content the same way the agent's tools do: a poisoned memory
+                # or document must reach the LLM wrapped as untrusted, never as plain evidence.
+                evidence.append(shield(f"[MEMORY · {memory.category}]", memory.summary))
                 sources.append(
                     CopilotSource(type="memory", id=memory.id, label=memory.summary[:80])
                 )
@@ -113,7 +116,13 @@ class ConstructionCopilot:
                 select(DocumentEmbedding).where(DocumentEmbedding.id.in_(document_ids))
             )
             for chunk in rows:
-                evidence.append(f"[{chunk.source_type} #{chunk.source_id}] {chunk.content[:400]}")
+                evidence.append(
+                    shield(
+                        f"[{chunk.source_type} #{chunk.source_id}]",
+                        chunk.content,
+                        display=chunk.content[:400],
+                    )
+                )
                 sources.append(
                     CopilotSource(
                         type=chunk.source_type, id=chunk.source_id, label=chunk.content[:80]
