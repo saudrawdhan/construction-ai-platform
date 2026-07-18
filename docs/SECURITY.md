@@ -54,8 +54,10 @@ auditable. Both are enforced structurally, not by convention.
   summaries. None of them execute an action with external consequence.
 - **Human-in-the-loop approvals.** A high-risk action is created as an approval request in `pending`
   state. A manager (admin, executive, or project_manager) approves or rejects it; the transition is
-  recorded in approval history and a notification is sent to the requester. A request cannot be
-  resolved twice. Nothing runs until a human approves it.
+  recorded in approval history and a notification is sent to the requester. The transition is a
+  single atomic `UPDATE … WHERE status = 'pending'`, so a request resolves exactly once even if two
+  approvers act at the same moment — the second is rejected with a `409` and writes no duplicate
+  history or notification. Nothing runs until a human approves it.
 - **Audit trail.** Every AI call — every workflow, copilot answer, and memory extraction — writes an
   `ai_audit_logs` row capturing the workflow, provider, model, the source ids it used, and an output
   excerpt. `GET /audit/ai-outputs` exposes this to admins and executives.
@@ -79,18 +81,24 @@ auditable. Both are enforced structurally, not by convention.
   user's `conversation_id` does not continue their conversation — a mismatched id is treated as no id
   at all and a fresh conversation starts instead. Skills remain intentionally shared and org-wide,
   since a reusable procedure is not any one person's data.
-- **Untrusted content inside the agent's own context.** Text pulled back from memory, documents, or
-  past sessions is fed into the planner and the final-answer prompt as *evidence*, but nothing about
-  a plain string distinguishes organizational data from an embedded instruction. Retrieved content is
-  screened for two independent patterns before it reaches either prompt: attack-style phrasing (for
-  example, an "ignore all prior instructions" override) and a specific governance claim — an
-  approval, threshold, or review step framed as already waived — regardless of how ordinary the
-  wording sounds. A match is wrapped in an explicit warning marker, and both prompts instruct the
-  model that retrieved content is data, never instructions, and that a suspicious or unverified claim
-  must be reported to the human, not acted on or restated as settled fact. This is a heuristic layered
-  on top of the agent's own judgment, not a guarantee against every possible phrasing — it closed a
-  live-reproduced case where a single poisoned memory record talked the agent into recommending that
-  a real purchase-order approval step be skipped.
+- **Untrusted retrieved content.** Text pulled back from memory, documents, or past sessions is fed
+  into an LLM as *evidence*, but nothing about a plain string distinguishes organizational data from
+  an embedded instruction. Retrieved content is screened for two independent patterns before it
+  reaches any prompt: attack-style phrasing (for example, an "ignore all prior instructions"
+  override) and a specific governance claim — an approval, threshold, or review step framed as
+  already waived — regardless of how ordinary the wording sounds. Both pattern sets are bilingual
+  (English and Arabic), since the platform's data and retrieval are bilingual and an English-only
+  screen would leave every Arabic record unprotected; the governance patterns are approval-context-
+  bound so ordinary Arabic text about a real review or approval is not falsely flagged. A match is
+  wrapped in an explicit warning marker, and the prompt instructs the model that retrieved content is
+  data, never instructions, and that a suspicious or unverified claim must be reported to the human,
+  not acted on or restated as settled fact. The screen runs on both AI surfaces that ground on
+  retrieved text — the agent's tools and the copilot's RAG — through one shared implementation, so
+  neither can be hardened while the other drifts behind. This is a heuristic layered on top of the
+  model's own judgment, not a guarantee against every possible phrasing — it closed a live-reproduced
+  case where a single poisoned memory record talked the agent into recommending that a real
+  purchase-order approval step be skipped, and a separate case where the copilot restated a
+  fabricated Arabic "auto-approve without review" claim as policy.
 - **No individual user profiling.** The agent recalls a user's own recent runs ahead of the wider
   organizational record (`recall_past_sessions` ranks the requester's own prior work first), and a
   follow-up in the same conversation carries its project scope forward. Neither mechanism builds a
@@ -141,7 +149,11 @@ Request bodies are validated by Pydantic before any handler runs, which rejects 
 a 422 automatically. The full-text query built for the copilot is constructed from alphanumeric
 tokens only, so it cannot inject into the `tsquery`. Uploaded files are size-capped at 10 MB, checked
 for an extractable text type, and rejected with a clear status code otherwise. Database integrity
-violations are caught and returned as `409 Conflict` rather than leaking a stack trace.
+violations are caught and returned as `409 Conflict` rather than leaking a stack trace. A value that
+passes Pydantic but the database itself cannot store — a string longer than its column, a number out
+of range, or an invalid byte sequence, which Postgres reports as a SQLSTATE class-22 data error — is
+likewise caught and returned as a clean `422`, so oversized or malformed input never surfaces as a
+raw `500`; any other database error is re-raised so a genuine server fault is still logged as one.
 
 ## Known trade-offs and deferred work
 

@@ -43,8 +43,10 @@ Cross-cutting pieces:
 
 - `api/deps.py` and `security/deps.py` provide the `DbSession` and `CurrentUser` dependencies and the
   `require_roles(...)` guard.
-- `main.py` adds CORS, a security-headers middleware, and a handler that turns database integrity
-  violations into clean `409 Conflict` responses instead of 500s.
+- `main.py` adds CORS, a security-headers middleware, and two database-error handlers: integrity
+  violations become clean `409 Conflict` responses, and a value the database cannot store (too long,
+  out of range, or malformed — SQLSTATE class 22) becomes a `422` instead of a raw 500, while any
+  other database error is re-raised so a genuine server fault is still surfaced and logged.
 - `config.py` is a single Pydantic `Settings` object read from environment variables, so the same
   code runs locally, in Docker, and in CI by changing configuration only.
 
@@ -175,10 +177,19 @@ now recurring on a new tool. Their result is also never handed to the LLM to re-
 live test found the model can invent a different figure for one line item while silently dropping
 another from its own sum when asked to summarize several named records with a total, identically
 across repeated runs even with an explicit system-prompt instruction not to recompute. A goal
-answered entirely by tools in this set therefore returns their computed observations directly as
-the final answer — the same "deterministic computation stays authoritative" principle already
-applied to risk scoring in `pr_review.py`, now applied to what the agent is allowed to say about a
-number it did not compute itself.
+answered entirely by tools in this set returns their computed observations directly as the final
+answer; a goal that mixes one of them with a genuinely analytical tool narrates only the analytical
+evidence — the exact figures are withheld from that narration prompt entirely — and appends the
+computed observations verbatim beneath it. The narrator is additionally instructed not to describe or
+even assert the existence of the withheld records (a live safety test caught the model writing "no
+safety events are recorded" directly above a verbatim list of five, inventing an absence of data it
+was never given); a wrong "none found" next to real high-severity records is as harmful as a wrong
+figure, so it is forbidden by the same mechanism. Either way the model is never shown a number it
+could distort, whether the trajectory is purely these tools or a mix, and the same protection
+overrides the planner's own free-text final answer when one of these tools ran (a live test showed
+that answer garbles the figures exactly as a synthesis pass does). This is the same "deterministic
+computation stays authoritative" principle already applied to risk scoring in `pr_review.py`, now
+applied to what the agent is allowed to say about a number it did not compute itself.
 
 **Conversation continuity.** Every run belongs to a conversation (the same `ai_conversations` table
 the copilot uses), new or continued by passing back the id the previous turn returned. A follow-up
@@ -242,10 +253,15 @@ the organization stored, not an instruction the agent should follow — but noth
 distinguishes the two from a raw string. Retrieved content is screened for two independent
 patterns before it reaches the planner or the final-answer synthesis: attack-style phrasing (for
 example "ignore all prior instructions") and a governance claim that a specific approval or review
-step has been waived, regardless of how ordinary the wording sounds. Either pattern wraps the
+step has been waived, regardless of how ordinary the wording sounds. Both pattern sets are bilingual
+(English and Arabic) — the platform's data and retrieval preserve Arabic, so an English-only screen
+would leave every Arabic record unprotected — with the governance patterns approval-context-bound so
+ordinary Arabic about a real review or approval is not falsely flagged. Either pattern wraps the
 content in an explicit warning marker and both system prompts state plainly that retrieved content
 is data, never instructions, and that a suspicious claim must be reported, not acted on or repeated
-as fact. This is a heuristic layered on top of the agent's own reasoning, not a guarantee against
+as fact. The screen lives in one shared module (`agents/content_shield.py`) applied on both surfaces
+that ground on retrieved text — the agent's tools and the copilot's RAG — so neither is hardened
+while the other drifts behind. This is a heuristic layered on top of the agent's own reasoning, not a guarantee against
 every possible phrasing — but it closed a live-reproduced failure where a single poisoned memory
 record talked the unguarded agent into recommending that a real approval step be skipped. The
 screening always runs against a source's full text before any preview is shortened for display —
@@ -263,7 +279,9 @@ workflow, copilot, or extraction — writes an `ai_audit_logs` row with the work
 model, source ids, and an output excerpt, exposed through `GET /audit/ai-outputs` to admins and
 executives. High-risk actions are never performed by the AI: they are created as approval requests
 that a manager approves or rejects, each transition recorded in approval history and notified to the
-requester. This directly implements the brief's requirement that high-risk AI actions have a human
+requester. The pending-to-decided transition is a single atomic conditional `UPDATE`, so a request
+resolves exactly once even under concurrent approvers — the loser gets a `409`, not a duplicate
+decision. This directly implements the brief's requirement that high-risk AI actions have a human
 in the loop.
 
 ## Scheduled automations
@@ -291,7 +309,7 @@ RBAC, which remains the actual authority.
 The suite runs against a real PostgreSQL instance for fidelity, but each test gets its own connection
 and an outer transaction that is rolled back at teardown; the application's own commits become
 savepoints, so nothing persists between tests. Under `TESTING` the mock LLM and hash embedder make
-everything deterministic and offline. This is why the 279-test suite can cover real database
+everything deterministic and offline. This is why the 301-test suite can cover real database
 behavior, AI workflows, and RBAC without a network call or any cleanup.
 
 ## Notable decisions
@@ -306,6 +324,13 @@ behavior, AI workflows, and RBAC without a network call or any cleanup.
   store, keeps consistency and operations simple.
 - **Deterministic core, generative surface.** Keeping the numbers in code and the prose in the model
   is the single biggest reason the AI output is trustworthy.
+- **One content shield for every retrieval surface.** Retrieved memory and document text is wrapped
+  as untrusted (flagging embedded instructions and fabricated governance waivers) by a single shared
+  module (`app/agents/content_shield.py`) used by BOTH the agent's tools and the copilot's grounded
+  RAG — so neither surface can be hardened while the other silently drifts behind.
+- **Bad input is a 4xx, not a 500.** A value the database itself cannot store (a field longer than its
+  column, a number out of range, an invalid byte) is caught by a global handler and returned as a
+  clean 422; only genuine server faults surface as 500s (and stay logged).
 - **Uploaded files live on disk, not in Postgres.** An uploaded document's original bytes are saved
   under a dedicated volume and referenced from its row by path, rather than stored as a database
   blob. This is the standard-scale-appropriate answer for a single-server deployment; if the platform

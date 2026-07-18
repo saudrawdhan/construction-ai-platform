@@ -32,8 +32,8 @@ Everything sensitive comes from the environment, never the image:
 | `REDIS_URL` | Redis DSN |
 | `JWT_SECRET` | token signing key — must be a strong 32+ byte value in production |
 | `POSTGRES_PASSWORD` | database password (required, no default) |
-| `LLM_PROVIDER` | `gemini` for live AI, `mock` for offline |
-| `LLM_API_KEY` | provider key, only needed when `LLM_PROVIDER` is not `mock` |
+| `LLM_PROVIDER` | live AI engine: `gemini` or `groq` (hosted, OpenAI-compatible), `local` (self-hosted Ollama), or `mock` (offline, deterministic) |
+| `LLM_API_KEY` | provider key, needed only for a hosted provider (`gemini`/`groq`); not used by `local` or `mock` |
 | `CORS_ORIGINS` | comma-separated allow-list of frontend origins |
 
 On a managed host, supply these through the platform's secret store rather than a committed file.

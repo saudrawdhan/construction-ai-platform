@@ -93,7 +93,11 @@ pending-PR alert, and the weekly executive report on a cron schedule, notifying 
 worker runs in mock-LLM mode so recurring jobs never consume API quota.
 
 **Document ingestion.** Upload a PDF, Word, or text file and it is parsed, chunked, embedded, and
-indexed into the same store the copilot and search use, so it becomes retrievable immediately.
+indexed into the same store the copilot and search use, so it becomes retrievable immediately. The
+original file is kept, so it can be downloaded back in full, and a document can be deleted — removing
+its row, its indexed chunks, and its stored file together — unless it is still cited as claim
+evidence, in which case the foreign key blocks the delete with a clear conflict rather than orphaning
+the reference.
 
 **Usable from an empty database.** The platform is not just a viewer of a fixed dataset — a company
 can adopt it and run its own operation:
@@ -247,7 +251,7 @@ A 16 GB GPU runs a 7B model comfortably; inference falls back to CPU where no GP
 ## Testing and quality
 
 ```bash
-docker compose run --rm -e TESTING=1 api pytest -q   # 279 tests, offline, deterministic
+docker compose run --rm -e TESTING=1 api pytest -q   # 301 tests, offline, deterministic
 docker compose run --rm api ruff check app scripts tests
 ```
 
