@@ -3,7 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Plus } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { date, money } from "../lib/format";
+import { date, money, enumLabel } from "../lib/format";
+import { useT } from "../lib/i18n";
 import {
   Badge,
   Button,
@@ -97,6 +98,7 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
 export default function ProjectDetail() {
   const { id } = useParams();
   const { user } = useAuth();
+  const t = useT();
   const canEdit = user && ["admin", "project_manager"].includes(user.role);
 
   const [project, setProject] = useState<Project>();
@@ -146,29 +148,29 @@ export default function ProjectDetail() {
   return (
     <div>
       <Link to="/projects" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
-        <ArrowLeft size={15} /> Projects
+        <ArrowLeft size={15} /> {t("nav.projects")}
       </Link>
       <PageHeader title={project.project_name} subtitle={`${project.project_code} · ${project.client_name}`} />
 
       <Card className="mb-6 p-5">
         <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
-          <Detail label="Status" value={<Badge tone={statusTone(project.status)}>{project.status}</Badge>} />
-          <Detail label="Type" value={project.project_type} />
-          <Detail label="City" value={project.city} />
-          <Detail label="Budget" value={money(project.budget)} />
-          <Detail label="Start" value={date(project.start_date)} />
-          <Detail label="Planned Finish" value={date(project.planned_finish)} />
-          <Detail label="Actual Finish" value={date(project.actual_finish)} />
+          <Detail label={t("common.status")} value={<Badge tone={statusTone(project.status)}>{enumLabel(project.status, t)}</Badge>} />
+          <Detail label={t("field.type")} value={enumLabel(project.project_type, t)} />
+          <Detail label={t("field.city")} value={project.city} />
+          <Detail label={t("col.budget")} value={money(project.budget)} />
+          <Detail label={t("pd.start")} value={date(project.start_date)} />
+          <Detail label={t("pd.plannedFinish")} value={date(project.planned_finish)} />
+          <Detail label={t("pd.actualFinish")} value={date(project.actual_finish)} />
         </div>
       </Card>
 
       <Tabs
         tabs={[
-          { key: "risks", label: "Risk Register" },
-          { key: "rfis", label: "RFIs" },
-          { key: "orders", label: "Purchase Orders" },
-          { key: "meetings", label: "Meetings" },
-          { key: "reports", label: "Site Reports" },
+          { key: "risks", label: t("pd.riskRegister") },
+          { key: "rfis", label: t("nav.rfis") },
+          { key: "orders", label: t("pd.purchaseOrders") },
+          { key: "meetings", label: t("nav.meetings") },
+          { key: "reports", label: t("nav.siteReports") },
         ]}
         active={wtab}
         onChange={setWtab}
@@ -177,14 +179,14 @@ export default function ProjectDetail() {
       {wtab === "rfis" && (
         <RelatedList<{ id: number; rfi_number: string; subject: string; status: string; priority: string }>
           endpoint={`/rfis?project_id=${id}&size=100`}
-          head={["RFI", "Subject", "Status", "Priority"]}
-          empty="No RFIs for this project."
+          head={[t("col.rfi"), t("col.subject"), t("col.status"), t("col.priority")]}
+          empty={t("pd.noRfis")}
           renderRow={(r) => (
             <tr key={r.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.rfi_number}</td>
               <td className="px-4 py-3 text-slate-800">{r.subject}</td>
-              <td className="px-4 py-3"><Badge tone={statusTone(r.status)}>{r.status}</Badge></td>
-              <td className="px-4 py-3"><Badge tone={statusTone(r.priority)}>{r.priority}</Badge></td>
+              <td className="px-4 py-3"><Badge tone={statusTone(r.status)}>{enumLabel(r.status, t)}</Badge></td>
+              <td className="px-4 py-3"><Badge tone={statusTone(r.priority)}>{enumLabel(r.priority, t)}</Badge></td>
             </tr>
           )}
         />
@@ -193,15 +195,15 @@ export default function ProjectDetail() {
       {wtab === "orders" && (
         <RelatedList<{ id: number; po_number: string; status: string; is_late: boolean; delay_days: number; promised_delivery: string | null }>
           endpoint={`/procurement/purchase-orders?project_id=${id}&size=100`}
-          head={["PO", "Promised", "Status", "Delay"]}
-          empty="No purchase orders for this project."
+          head={[t("col.po"), t("col.promised"), t("col.status"), t("col.delay")]}
+          empty={t("pd.noOrders")}
           renderRow={(o) => (
             <tr key={o.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-mono text-xs text-slate-500">{o.po_number}</td>
               <td className="px-4 py-3 text-slate-600">{date(o.promised_delivery)}</td>
-              <td className="px-4 py-3"><Badge tone={statusTone(o.status)}>{o.status}</Badge></td>
+              <td className="px-4 py-3"><Badge tone={statusTone(o.status)}>{enumLabel(o.status, t)}</Badge></td>
               <td className="px-4 py-3">
-                {o.is_late ? <span className="font-medium text-red-600">{o.delay_days}d late</span> : <span className="text-emerald-600">On time</span>}
+                {o.is_late ? <span className="font-medium text-red-600">{t("pd.daysLate", { n: o.delay_days })}</span> : <span className="text-emerald-600">{t("pd.onTime")}</span>}
               </td>
             </tr>
           )}
@@ -211,12 +213,12 @@ export default function ProjectDetail() {
       {wtab === "meetings" && (
         <RelatedList<{ id: number; title: string; meeting_type: string; meeting_date: string | null }>
           endpoint={`/meetings?project_id=${id}&size=100`}
-          head={["Title", "Type", "Date"]}
-          empty="No meetings for this project."
+          head={[t("col.title"), t("col.type"), t("col.date")]}
+          empty={t("pd.noMeetings")}
           renderRow={(m) => (
             <tr key={m.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-medium text-slate-800">{m.title}</td>
-              <td className="px-4 py-3"><Badge tone="slate">{m.meeting_type}</Badge></td>
+              <td className="px-4 py-3"><Badge tone="slate">{enumLabel(m.meeting_type, t)}</Badge></td>
               <td className="px-4 py-3 text-slate-600">{date(m.meeting_date)}</td>
             </tr>
           )}
@@ -226,12 +228,12 @@ export default function ProjectDetail() {
       {wtab === "reports" && (
         <RelatedList<{ id: number; report_date: string | null; weather: string; summary: string }>
           endpoint={`/site-reports?project_id=${id}&size=100`}
-          head={["Date", "Weather", "Summary"]}
-          empty="No site reports for this project."
+          head={[t("col.date"), t("col.weather"), t("col.summary")]}
+          empty={t("pd.noReports")}
           renderRow={(s) => (
             <tr key={s.id} className="hover:bg-slate-50">
               <td className="whitespace-nowrap px-4 py-3 text-slate-600">{date(s.report_date)}</td>
-              <td className="px-4 py-3 text-slate-600">{s.weather}</td>
+              <td className="px-4 py-3 text-slate-600">{enumLabel(s.weather, t)}</td>
               <td className="max-w-md px-4 py-3 text-slate-700"><div className="truncate">{s.summary}</div></td>
             </tr>
           )}
@@ -240,10 +242,10 @@ export default function ProjectDetail() {
 
       {wtab === "risks" && (
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">Risk Register</h2>
+        <h2 className="text-lg font-semibold text-slate-900">{t("pd.riskRegister")}</h2>
         {canEdit && (
           <Button variant={showForm ? "secondary" : "primary"} onClick={() => setShowForm((v) => !v)}>
-            <Plus size={16} /> {showForm ? "Cancel" : "Add Risk"}
+            <Plus size={16} /> {showForm ? t("common.cancel") : t("pd.addRisk")}
           </Button>
         )}
       </div>
@@ -253,12 +255,12 @@ export default function ProjectDetail() {
         <Card className="mb-4 p-5">
           <form onSubmit={submitRisk} className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Field label="Title">
+              <Field label={t("col.title")}>
                 <Input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
               </Field>
             </div>
             <div className="sm:col-span-2">
-              <Field label="Description">
+              <Field label={t("field.description")}>
                 <Textarea
                   rows={2}
                   value={form.description}
@@ -266,26 +268,26 @@ export default function ProjectDetail() {
                 />
               </Field>
             </div>
-            <Field label="Severity">
+            <Field label={t("field.severity")}>
               <Select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
                 {SEVERITIES.map((s) => (
-                  <option key={s}>{s}</option>
+                  <option key={s} value={s}>{enumLabel(s, t)}</option>
                 ))}
               </Select>
             </Field>
-            <Field label="Likelihood">
+            <Field label={t("field.likelihood")}>
               <Select value={form.likelihood} onChange={(e) => setForm({ ...form, likelihood: e.target.value })}>
                 {LIKELIHOODS.map((s) => (
-                  <option key={s}>{s}</option>
+                  <option key={s} value={s}>{enumLabel(s, t)}</option>
                 ))}
               </Select>
             </Field>
-            <Field label="Owner">
+            <Field label={t("field.owner")}>
               <Input value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
             </Field>
             <div className="flex items-end">
               <Button type="submit" disabled={saving}>
-                {saving ? "Saving…" : "Save Risk"}
+                {saving ? t("common.saving") : t("pd.saveRisk")}
               </Button>
             </div>
             {formError && (
@@ -299,7 +301,7 @@ export default function ProjectDetail() {
 
       {wtab === "risks" && (
       <Card>
-        <Table head={["Title", "Severity", "Likelihood", "Status", "Owner", "Raised"]}>
+        <Table head={[t("col.title"), t("col.severity"), t("col.likelihood"), t("col.status"), t("col.owner"), t("col.raised")]}>
           {risks.map((r) => (
             <tr key={r.id} className="hover:bg-slate-50">
               <td className="px-4 py-3">
@@ -307,18 +309,18 @@ export default function ProjectDetail() {
                 {r.description && <div className="mt-0.5 text-xs text-slate-500">{r.description}</div>}
               </td>
               <td className="px-4 py-3">
-                <Badge tone={statusTone(r.severity)}>{r.severity}</Badge>
+                <Badge tone={statusTone(r.severity)}>{enumLabel(r.severity, t)}</Badge>
               </td>
-              <td className="px-4 py-3 text-slate-600">{r.likelihood ?? "—"}</td>
+              <td className="px-4 py-3 text-slate-600">{r.likelihood ? enumLabel(r.likelihood, t) : "—"}</td>
               <td className="px-4 py-3">
-                <Badge tone={statusTone(r.status)}>{r.status}</Badge>
+                <Badge tone={statusTone(r.status)}>{enumLabel(r.status, t)}</Badge>
               </td>
               <td className="px-4 py-3 text-slate-600">{r.owner ?? "—"}</td>
               <td className="px-4 py-3 text-slate-600">{date(r.created_at)}</td>
             </tr>
           ))}
         </Table>
-        {risks.length === 0 && <EmptyState message="No risks recorded for this project yet." />}
+        {risks.length === 0 && <EmptyState message={t("pd.noRisks")} />}
       </Card>
       )}
     </div>

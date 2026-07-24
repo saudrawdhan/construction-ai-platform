@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Send, ShieldCheck, ShieldAlert, FileText, BrainCircuit, Mail } from "lucide-react";
 import { api, ApiError } from "../lib/api";
+import { useT } from "../lib/i18n";
 import { PageHeader, ProviderTag } from "../components/ui";
 
 interface Source {
@@ -34,6 +35,7 @@ function SourceChip({ source }: { source: Source }) {
 }
 
 export default function Copilot() {
+  const t = useT();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
   const [conversationId, setConversationId] = useState<number>();
@@ -59,7 +61,10 @@ export default function Copilot() {
       setConversationId(res.conversation_id);
       setTurns((t) => [...t, { role: "assistant", text: res.answer, answer: res }]);
     } catch (err) {
-      setTurns((t) => [...t, { role: "assistant", text: `Error: ${(err as ApiError).message}` }]);
+      setTurns((prev) => [
+        ...prev,
+        { role: "assistant", text: t("copilot.error", { msg: (err as ApiError).message }) },
+      ]);
     } finally {
       setBusy(false);
     }
@@ -67,38 +72,38 @@ export default function Copilot() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Construction Copilot" subtitle="Grounded Q&A over enterprise memory and the document corpus" />
+      <PageHeader title={t("copilot.title")} subtitle={t("copilot.subtitle")} />
 
       <div className="flex-1 space-y-4 overflow-y-auto rounded-xl border border-slate-200 bg-white p-5">
         {turns.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400">
             <BrainCircuit size={36} />
-            <p className="text-sm">Ask about project risks, supplier performance, decisions, or safety.</p>
-            <p className="text-xs">The copilot only answers from retrieved evidence — and says so when it finds none.</p>
+            <p className="text-sm">{t("copilot.emptyHint1")}</p>
+            <p className="text-xs">{t("copilot.emptyHint2")}</p>
           </div>
         )}
         {turns.map((turn, i) =>
           turn.role === "user" ? (
             <div key={i} className="flex justify-end">
-              <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-blue-600 px-4 py-2 text-sm text-white">
+              <div className="max-w-[80%] rounded-2xl rounded-ee-sm bg-blue-600 px-4 py-2 text-sm text-white">
                 {turn.text}
               </div>
             </div>
           ) : (
             <div key={i} className="flex justify-start">
               <div className="max-w-[85%] space-y-2">
-                <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-2 text-sm text-slate-800">
+                <div className="rounded-2xl rounded-es-sm bg-slate-100 px-4 py-2 text-sm text-slate-800">
                   <p className="whitespace-pre-wrap">{turn.text}</p>
                 </div>
                 {turn.answer && (
-                  <div className="flex flex-wrap items-center gap-2 pl-1">
+                  <div className="flex flex-wrap items-center gap-2 ps-1">
                     {turn.answer.grounded ? (
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                        <ShieldCheck size={13} /> Grounded
+                        <ShieldCheck size={13} /> {t("copilot.grounded")}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
-                        <ShieldAlert size={13} /> No evidence found
+                        <ShieldAlert size={13} /> {t("copilot.noEvidence")}
                       </span>
                     )}
                     {turn.answer.sources.map((s, j) => (
@@ -111,7 +116,7 @@ export default function Copilot() {
             </div>
           )
         )}
-        {busy && <div className="pl-1 text-sm text-slate-400">Thinking…</div>}
+        {busy && <div className="ps-1 text-sm text-slate-400">{t("copilot.thinking")}</div>}
         <div ref={endRef} />
       </div>
 
@@ -119,7 +124,7 @@ export default function Copilot() {
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask the construction copilot…"
+          placeholder={t("copilot.placeholder")}
           className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
         />
         <button
@@ -127,7 +132,7 @@ export default function Copilot() {
           disabled={busy || question.trim().length < 3}
           className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:bg-blue-300"
         >
-          <Send size={16} /> Send
+          <Send size={16} /> {t("common.send")}
         </button>
       </form>
     </div>

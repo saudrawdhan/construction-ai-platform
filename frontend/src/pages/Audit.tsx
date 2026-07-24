@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Page } from "../lib/api";
-import { dateTime, titleCase } from "../lib/format";
+import { dateTime, workflowLabel } from "../lib/format";
+import { useT } from "../lib/i18n";
 import {
   Badge,
   Card,
@@ -39,6 +40,7 @@ const WORKFLOWS = [
 ];
 
 export default function Audit() {
+  const t = useT();
   const [data, setData] = useState<Page<AuditLog>>();
   const [error, setError] = useState<string>();
   const [forbidden, setForbidden] = useState(false);
@@ -59,19 +61,19 @@ export default function Audit() {
   if (forbidden)
     return (
       <div>
-        <PageHeader title="AI Audit Trail" />
+        <PageHeader title={t("audit.title")} />
         <Card>
-          <EmptyState message="The audit trail is restricted to admin and executive roles." />
+          <EmptyState message={t("audit.restricted")} />
         </Card>
       </div>
     );
 
   return (
     <div>
-      <PageHeader title="AI Audit Trail" subtitle="Every AI call logged with provider, model, sources, and tokens" />
+      <PageHeader title={t("audit.title")} subtitle={t("audit.subtitle")} />
 
       <FilterBar>
-        <Field label="Workflow">
+        <Field label={t("field.workflow")}>
           <Select
             value={workflow}
             onChange={(e) => {
@@ -79,10 +81,10 @@ export default function Audit() {
               setPage(1);
             }}
           >
-            <option value="">All workflows</option>
+            <option value="">{t("audit.allWorkflows")}</option>
             {WORKFLOWS.map((w) => (
               <option key={w} value={w}>
-                {titleCase(w)}
+                {workflowLabel(w, t)}
               </option>
             ))}
           </Select>
@@ -94,11 +96,11 @@ export default function Audit() {
 
       {data && (
         <Card>
-          <Table head={["Workflow", "Provider", "Output Excerpt", "Tokens", "When"]}>
+          <Table head={[t("col.workflow"), t("col.provider"), t("col.outputExcerpt"), t("col.tokens"), t("col.when")]}>
             {data.items.map((log) => (
               <tr key={log.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3">
-                  <Badge tone="blue">{titleCase(log.workflow)}</Badge>
+                  <Badge tone="blue">{workflowLabel(log.workflow, t)}</Badge>
                 </td>
                 <td className="px-4 py-3">
                   <ProviderTag provider={log.provider} model={log.model} />
@@ -115,7 +117,7 @@ export default function Audit() {
               </tr>
             ))}
           </Table>
-          {data.items.length === 0 && <EmptyState message="No AI calls logged yet." />}
+          {data.items.length === 0 && <EmptyState message={t("audit.noneYet")} />}
           <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
         </Card>
       )}

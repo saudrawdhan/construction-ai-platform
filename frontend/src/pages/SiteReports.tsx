@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Sparkles, CheckCircle2, AlertTriangle, TriangleAlert, Plus, Upload } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { date } from "../lib/format";
+import { date, enumLabel } from "../lib/format";
+import { useT, type Translate } from "../lib/i18n";
 import {
   Button,
   Card,
@@ -24,17 +25,17 @@ import ImportModal from "../components/ImportModal";
 import RowActions from "../components/RowActions";
 import ProjectPicker from "../components/ProjectPicker";
 
-const SITE_REPORT_FIELDS = [
-  { name: "project_id", label: "Project", type: "project" as const, required: true },
-  { name: "report_date", label: "Date", type: "date" as const },
+const siteReportFields = (t: Translate) => [
+  { name: "project_id", label: t("common.project"), type: "project" as const, required: true },
+  { name: "report_date", label: t("common.date"), type: "date" as const },
   {
     name: "weather",
-    label: "Weather",
+    label: t("field.weather"),
     type: "select" as const,
     options: ["Clear", "Cloudy", "Dusty", "Humid", "Rain"],
     initial: "Clear",
   },
-  { name: "summary", label: "Summary", type: "textarea" as const, required: true },
+  { name: "summary", label: t("field.summary"), type: "textarea" as const, required: true },
 ];
 
 interface SiteReport {
@@ -80,6 +81,7 @@ function BulletList({ items, tone }: { items: string[]; tone: string }) {
 
 export default function SiteReports() {
   const { user } = useAuth();
+  const t = useT();
   const canAnalyze = !!user && ["admin", "project_manager", "site_engineer"].includes(user.role);
   const [data, setData] = useState<Page<SiteReport>>();
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -116,11 +118,11 @@ export default function SiteReports() {
 
   return (
     <div>
-      <PageHeader title="Site Reports" subtitle="Daily site reports and AI field-report analysis" />
+      <PageHeader title={t("nav.siteReports")} subtitle={t("sr.subtitle")} />
 
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <FilterBar>
-          <Field label="Project">
+          <Field label={t("common.project")}>
             <div className="w-56">
               <ProjectPicker
                 projects={projects}
@@ -136,13 +138,13 @@ export default function SiteReports() {
         {canAnalyze && (
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setShowImport(true)}>
-              <Upload size={15} /> Import
+              <Upload size={15} /> {t("common.import")}
             </Button>
             <Button variant="secondary" onClick={() => setShowCreate(true)}>
-              <Plus size={15} /> New Site Report
+              <Plus size={15} /> {t("sr.new")}
             </Button>
             <Button onClick={() => setOpen(true)}>
-              <Sparkles size={15} /> Analyze Report
+              <Sparkles size={15} /> {t("sr.analyzeReport")}
             </Button>
           </div>
         )}
@@ -153,27 +155,27 @@ export default function SiteReports() {
 
       {data && (
         <Card>
-          <Table head={["Date", "Project", "Weather", "Summary", ""]}>
+          <Table head={[t("col.date"), t("col.project"), t("col.weather"), t("col.summary"), ""]}>
             {data.items.map((r) => (
               <tr key={r.id} className="hover:bg-slate-50">
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">{date(r.report_date)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">{projectName(r.project_id)}</td>
-                <td className="px-4 py-3 text-slate-600">{r.weather}</td>
+                <td className="px-4 py-3 text-slate-600">{enumLabel(r.weather, t)}</td>
                 <td className="max-w-md px-4 py-3 text-slate-700">
                   <button
                     onClick={() => openDetail(r)}
-                    className="block max-w-md truncate text-left hover:text-blue-700 hover:underline"
-                    title="View site activities"
+                    className="block max-w-md truncate text-start hover:text-blue-700 hover:underline"
+                    title={t("sr.viewActivities")}
                   >
                     {r.summary}
                   </button>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-end">
                   <RowActions
                     record={r}
-                    entityLabel="Site Report"
+                    entityLabel={t("entity.siteReport")}
                     endpoint="/site-reports"
-                    fields={SITE_REPORT_FIELDS}
+                    fields={siteReportFields(t)}
                     canManage={canAnalyze}
                     onChanged={() => setRefresh((n) => n + 1)}
                   />
@@ -181,33 +183,33 @@ export default function SiteReports() {
               </tr>
             ))}
           </Table>
-          {data.items.length === 0 && <EmptyState message="No site reports match this filter." />}
+          {data.items.length === 0 && <EmptyState message={t("sr.noneMatch")} />}
           <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
         </Card>
       )}
 
       {detail && (
-        <Modal title={`Site Report · ${date(detail.report.report_date)}`} onClose={() => setDetail(undefined)}>
+        <Modal title={t("sr.detailTitle", { date: date(detail.report.report_date) })} onClose={() => setDetail(undefined)}>
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <span>{projectName(detail.report.project_id)}</span>
               <span>·</span>
-              <span>Weather: {detail.report.weather}</span>
+              <span>{t("sr.weatherLabel", { w: enumLabel(detail.report.weather, t) })}</span>
             </div>
             <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{detail.report.summary}</p>
             <div>
               <div className="mb-2 text-xs font-medium text-slate-500">
-                Site Activities ({detail.activities.length})
+                {t("sr.activities", { n: detail.activities.length })}
               </div>
               {detail.activities.length === 0 ? (
-                <p className="text-sm text-slate-400">No activities logged for this report.</p>
+                <p className="text-sm text-slate-400">{t("sr.noActivities")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {detail.activities.map((a) => (
                     <div key={a.id} className="flex items-start justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm">
                       <span className="text-slate-700">{a.activity_description}</span>
                       <span className="flex-shrink-0 text-xs text-slate-400">
-                        {a.manpower_count} workers{a.activity_date ? ` · ${date(a.activity_date)}` : ""}
+                        {t("sr.workers", { n: a.manpower_count })}{a.activity_date ? ` · ${date(a.activity_date)}` : ""}
                       </span>
                     </div>
                   ))}
@@ -222,10 +224,10 @@ export default function SiteReports() {
 
       {showCreate && (
         <CreateModal
-          title="New Site Report"
+          title={t("sr.new")}
           endpoint="/site-reports"
-          fields={SITE_REPORT_FIELDS}
-          submitLabel="Create Site Report"
+          fields={siteReportFields(t)}
+          submitLabel={t("sr.createSr")}
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
@@ -237,7 +239,7 @@ export default function SiteReports() {
 
       {showImport && (
         <ImportModal
-          title="Import Site Reports"
+          title={t("sr.importTitle")}
           importPath="/site-reports/import"
           templatePath="/site-reports/import/template"
           templateFilename="site_reports_template.csv"
@@ -253,6 +255,7 @@ export default function SiteReports() {
 }
 
 function AnalyzeModal({ projects, onClose }: { projects: ProjectOption[]; onClose: () => void }) {
+  const t = useT();
   const [projectId, setProjectId] = useState("");
   const [reportDate, setReportDate] = useState("");
   const [text, setText] = useState("");
@@ -281,26 +284,26 @@ function AnalyzeModal({ projects, onClose }: { projects: ProjectOption[]; onClos
   }
 
   return (
-    <Modal title="Analyze Site Report" onClose={onClose}>
+    <Modal title={t("sr.analyzeTitle")} onClose={onClose}>
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Project">
+          <Field label={t("common.project")}>
             <ProjectPicker
               projects={projects}
               value={projectId}
               onChange={setProjectId}
-              placeholder="Select a project…"
+              placeholder={t("form.selectProject")}
               required
             />
           </Field>
-          <Field label="Report Date">
+          <Field label={t("field.reportDate")}>
             <Input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
           </Field>
         </div>
-        <Field label="Site report text">
+        <Field label={t("sr.reportText")}>
           <Textarea
             rows={6}
-            placeholder="Paste the field report — the agent extracts completed work, delays, risks, manpower notes, and an escalation recommendation."
+            placeholder={t("sr.reportPlaceholder")}
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
@@ -313,10 +316,10 @@ function AnalyzeModal({ projects, onClose }: { projects: ProjectOption[]; onClos
               onChange={(e) => setStore(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300"
             />
-            Persist risk / issue memory
+            {t("sr.persistMemory")}
           </label>
           <Button disabled={busy || !projectId || text.trim().length < 10} onClick={run}>
-            <Sparkles size={15} /> {busy ? "Analyzing…" : "Analyze"}
+            <Sparkles size={15} /> {busy ? t("sr.analyzing") : t("common.analyze")}
           </Button>
         </div>
         {error && <div className="text-sm text-red-600">{error}</div>}
@@ -324,11 +327,11 @@ function AnalyzeModal({ projects, onClose }: { projects: ProjectOption[]; onClos
         {result && (
           <div className="space-y-4 border-t border-slate-100 pt-4">
             <ProviderTag provider={result.provider} model={result.model} />
-            <LabelValue label="Summary" value={<p className="whitespace-pre-wrap">{result.summary}</p>} />
+            <LabelValue label={t("field.summary")} value={<p className="whitespace-pre-wrap">{result.summary}</p>} />
             {result.completed_work.length > 0 && (
               <div>
                 <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-emerald-600">
-                  <CheckCircle2 size={13} /> Completed Work
+                  <CheckCircle2 size={13} /> {t("sr.completedWork")}
                 </div>
                 <BulletList items={result.completed_work} tone="text-slate-700" />
               </div>
@@ -336,7 +339,7 @@ function AnalyzeModal({ projects, onClose }: { projects: ProjectOption[]; onClos
             {result.delays.length > 0 && (
               <div>
                 <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-600">
-                  <AlertTriangle size={13} /> Delays
+                  <AlertTriangle size={13} /> {t("sr.delays")}
                 </div>
                 <BulletList items={result.delays} tone="text-amber-700" />
               </div>
@@ -344,13 +347,13 @@ function AnalyzeModal({ projects, onClose }: { projects: ProjectOption[]; onClos
             {result.risks.length > 0 && (
               <div>
                 <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
-                  <TriangleAlert size={13} /> Risks
+                  <TriangleAlert size={13} /> {t("sr.risks")}
                 </div>
                 <BulletList items={result.risks} tone="text-red-700" />
               </div>
             )}
-            {result.manpower_note && <LabelValue label="Manpower" value={result.manpower_note} />}
-            <LabelValue label="Recommended Escalation" value={result.recommended_escalation} />
+            {result.manpower_note && <LabelValue label={t("sr.manpower")} value={result.manpower_note} />}
+            <LabelValue label={t("sr.recommendedEscalation")} value={result.recommended_escalation} />
           </div>
         )}
       </div>

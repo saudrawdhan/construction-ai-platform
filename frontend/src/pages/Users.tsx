@@ -3,6 +3,7 @@ import { Plus, UserPlus } from "lucide-react";
 import { api, ApiError, type Page, type User } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { dateTime, roleLabel } from "../lib/format";
+import { useT } from "../lib/i18n";
 import {
   Badge,
   Button,
@@ -31,6 +32,7 @@ const ROLES = [
 
 export default function Users() {
   const { user: me } = useAuth();
+  const t = useT();
   const [data, setData] = useState<Page<User>>();
   const [error, setError] = useState<string>();
   const [forbidden, setForbidden] = useState(false);
@@ -67,9 +69,9 @@ export default function Users() {
   if (forbidden)
     return (
       <div>
-        <PageHeader title="Users" />
+        <PageHeader title={t("nav.users")} />
         <Card>
-          <EmptyState message="User management is restricted to administrators." />
+          <EmptyState message={t("users.restricted")} />
         </Card>
       </div>
     );
@@ -77,9 +79,9 @@ export default function Users() {
   return (
     <div>
       <div className="flex items-start justify-between">
-        <PageHeader title="Users" subtitle="Manage accounts, roles, and access" />
+        <PageHeader title={t("nav.users")} subtitle={t("users.subtitle")} />
         <Button onClick={() => setShowForm(true)}>
-          <Plus size={16} /> Add User
+          <Plus size={16} /> {t("users.addUser")}
         </Button>
       </div>
 
@@ -88,14 +90,14 @@ export default function Users() {
 
       {data && (
         <Card>
-          <Table head={["Name", "Email", "Role", "Status", "Created", "Actions"]}>
+          <Table head={[t("col.name"), t("col.email"), t("col.role"), t("col.status"), t("col.created"), t("col.actions")]}>
             {data.items.map((u) => {
               const isSelf = me?.id === u.id;
               return (
                 <tr key={u.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-800">
                     {u.full_name}
-                    {isSelf && <span className="ml-2 text-xs text-slate-400">(you)</span>}
+                    {isSelf && <span className="ms-2 text-xs text-slate-400">{t("users.you")}</span>}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{u.email}</td>
                   <td className="px-4 py-3">
@@ -107,14 +109,14 @@ export default function Users() {
                     >
                       {ROLES.map((r) => (
                         <option key={r} value={r}>
-                          {roleLabel(r)}
+                          {roleLabel(r, t)}
                         </option>
                       ))}
                     </Select>
                   </td>
                   <td className="px-4 py-3">
                     <Badge tone={u.is_active ? "green" : "slate"}>
-                      {u.is_active ? "Active" : "Inactive"}
+                      {u.is_active ? t("users.activeBadge") : t("users.inactiveBadge")}
                     </Badge>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-600">
@@ -127,7 +129,7 @@ export default function Users() {
                         disabled={rowBusy === u.id}
                         onClick={() => patchUser(u.id, { is_active: !u.is_active })}
                       >
-                        {u.is_active ? "Deactivate" : "Activate"}
+                        {u.is_active ? t("users.deactivate") : t("users.activate")}
                       </Button>
                     )}
                   </td>
@@ -135,7 +137,7 @@ export default function Users() {
               );
             })}
           </Table>
-          {data.items.length === 0 && <EmptyState message="No users yet." />}
+          {data.items.length === 0 && <EmptyState message={t("users.noneYet")} />}
           <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
         </Card>
       )}
@@ -155,6 +157,7 @@ export default function Users() {
 }
 
 function NewUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const t = useT();
   const [form, setForm] = useState({
     email: "",
     full_name: "",
@@ -181,12 +184,12 @@ function NewUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   }
 
   return (
-    <Modal title="Add User" onClose={onClose}>
+    <Modal title={t("users.addUser")} onClose={onClose}>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-        <Field label="Full name">
+        <Field label={t("field.fullName")}>
           <Input required value={form.full_name} onChange={(e) => set("full_name", e.target.value)} />
         </Field>
-        <Field label="Email">
+        <Field label={t("login.email")}>
           <Input
             required
             type="email"
@@ -195,16 +198,16 @@ function NewUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
             placeholder="name@company.com"
           />
         </Field>
-        <Field label="Role">
+        <Field label={t("col.role")}>
           <Select value={form.role} onChange={(e) => set("role", e.target.value)}>
             {ROLES.map((r) => (
               <option key={r} value={r}>
-                {roleLabel(r)}
+                {roleLabel(r, t)}
               </option>
             ))}
           </Select>
         </Field>
-        <Field label="Password (min 8 characters)">
+        <Field label={t("field.password8")}>
           <Input
             required
             type="password"
@@ -217,10 +220,10 @@ function NewUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           {error && <ErrorBox message={error} />}
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={onClose}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={saving}>
-              <UserPlus size={16} /> {saving ? "Creating…" : "Create User"}
+              <UserPlus size={16} /> {saving ? t("users.creating") : t("users.createUser")}
             </Button>
           </div>
         </div>

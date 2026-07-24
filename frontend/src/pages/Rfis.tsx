@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Siren, Plus, Upload } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { date } from "../lib/format";
+import { date, enumLabel } from "../lib/format";
+import { useT, type Translate } from "../lib/i18n";
 import {
   Badge,
   Button,
@@ -25,30 +26,30 @@ import RowActions from "../components/RowActions";
 import ProjectPicker from "../components/ProjectPicker";
 import RequestApprovalButton from "../components/RequestApprovalButton";
 
-const RFI_FIELDS = [
-  { name: "project_id", label: "Project", type: "project" as const, required: true },
-  { name: "rfi_number", label: "RFI number", required: true },
-  { name: "subject", label: "Subject", required: true, full: true },
-  { name: "question", label: "Question", type: "textarea" as const, required: true },
-  { name: "discipline", label: "Discipline", required: true },
+const rfiFields = (t: Translate) => [
+  { name: "project_id", label: t("common.project"), type: "project" as const, required: true },
+  { name: "rfi_number", label: t("field.rfiNumber"), required: true },
+  { name: "subject", label: t("field.subject"), required: true, full: true },
+  { name: "question", label: t("field.question"), type: "textarea" as const, required: true },
+  { name: "discipline", label: t("field.discipline"), required: true },
   {
     name: "priority",
-    label: "Priority",
+    label: t("field.priority"),
     type: "select" as const,
     options: ["Low", "Medium", "High", "Critical"],
     initial: "Medium",
   },
   {
     name: "status",
-    label: "Status",
+    label: t("field.status"),
     type: "select" as const,
     options: ["Open", "In Review", "Answered", "Closed"],
     initial: "Open",
   },
-  { name: "raised_by", label: "Raised by", required: true },
-  { name: "assigned_to", label: "Assigned to", required: true },
-  { name: "raised_date", label: "Raised date", type: "date" as const },
-  { name: "required_date", label: "Required date", type: "date" as const },
+  { name: "raised_by", label: t("field.raisedBy"), required: true },
+  { name: "assigned_to", label: t("field.assignedTo"), required: true },
+  { name: "raised_date", label: t("field.raisedDate"), type: "date" as const },
+  { name: "required_date", label: t("field.requiredDate"), type: "date" as const },
 ];
 
 interface Rfi {
@@ -86,6 +87,7 @@ interface Escalation {
 
 export default function Rfis() {
   const { user } = useAuth();
+  const t = useT();
   const canAnalyze = !!user && ["admin", "project_manager", "site_engineer"].includes(user.role);
   const [data, setData] = useState<Page<Rfi>>();
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -126,21 +128,21 @@ export default function Rfis() {
   return (
     <div>
       <div className="flex items-start justify-between">
-        <PageHeader title="RFIs" subtitle="Requests for Information and overdue escalation" />
+        <PageHeader title={t("nav.rfis")} subtitle={t("rfi.subtitle")} />
         {canAnalyze && (
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setShowImport(true)}>
-              <Upload size={16} /> Import
+              <Upload size={16} /> {t("common.import")}
             </Button>
             <Button onClick={() => setShowCreate(true)}>
-              <Plus size={16} /> New RFI
+              <Plus size={16} /> {t("rfi.new")}
             </Button>
           </div>
         )}
       </div>
 
       <FilterBar>
-        <Field label="Project">
+        <Field label={t("common.project")}>
           <div className="w-56">
             <ProjectPicker
               projects={projects}
@@ -162,11 +164,11 @@ export default function Rfis() {
             }}
             className="h-4 w-4 rounded border-slate-300"
           />
-          Overdue only
+          {t("rfi.overdueOnly")}
         </label>
         {canAnalyze && (
-          <Button disabled={!projectId || busy} onClick={analyze} title={!projectId ? "Select a project first" : ""}>
-            <Siren size={15} /> {busy ? "Analyzing…" : "Analyze Overdue RFIs"}
+          <Button disabled={!projectId || busy} onClick={analyze} title={!projectId ? t("rfi.selectFirst") : ""}>
+            <Siren size={15} /> {busy ? t("rfi.analyzing") : t("rfi.analyze")}
           </Button>
         )}
       </FilterBar>
@@ -176,7 +178,7 @@ export default function Rfis() {
 
       {data && (
         <Card>
-          <Table head={["RFI", "Subject", "Discipline", "Assigned", "Due", "Status", "Priority", ""]}>
+          <Table head={[t("col.rfi"), t("col.subject"), t("col.discipline"), t("col.assigned"), t("col.due"), t("col.status"), t("col.priority"), ""]}>
             {data.items.map((r) => (
               <tr key={r.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.rfi_number}</td>
@@ -185,17 +187,17 @@ export default function Rfis() {
                 <td className="px-4 py-3 text-slate-600">{r.assigned_to}</td>
                 <td className="px-4 py-3 text-slate-600">{date(r.required_date)}</td>
                 <td className="px-4 py-3">
-                  <Badge tone={statusTone(r.status)}>{r.status}</Badge>
+                  <Badge tone={statusTone(r.status)}>{enumLabel(r.status, t)}</Badge>
                 </td>
                 <td className="px-4 py-3">
-                  <Badge tone={statusTone(r.priority)}>{r.priority}</Badge>
+                  <Badge tone={statusTone(r.priority)}>{enumLabel(r.priority, t)}</Badge>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-end">
                   <RowActions
                     record={r}
-                    entityLabel="RFI"
+                    entityLabel={t("entity.rfi")}
                     endpoint="/rfis"
-                    fields={RFI_FIELDS}
+                    fields={rfiFields(t)}
                     canManage={canAnalyze}
                     onChanged={() => setRefresh((n) => n + 1)}
                   />
@@ -203,24 +205,24 @@ export default function Rfis() {
               </tr>
             ))}
           </Table>
-          {data.items.length === 0 && <EmptyState message="No RFIs match these filters." />}
+          {data.items.length === 0 && <EmptyState message={t("rfi.noneMatch")} />}
           <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
         </Card>
       )}
 
       {escalation && (
-        <Modal title={`RFI Escalation · ${escalation.overdue_count} overdue`} onClose={() => setEscalation(undefined)}>
+        <Modal title={t("rfi.escalationTitle", { n: escalation.overdue_count })} onClose={() => setEscalation(undefined)}>
           <div className="space-y-4">
             <ProviderTag provider={escalation.provider} model={escalation.model} />
             <LabelValue
-              label="Drafted Escalation Message"
+              label={t("rfi.draftedMessage")}
               value={<p className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-slate-700">{escalation.escalation_message}</p>}
             />
             {escalation.overdue_count > 0 && (
               <RequestApprovalButton
                 actionType="send_rfi_escalation"
                 projectId={escalation.project_id}
-                label="Request Approval to Send"
+                label={t("rfi.requestApprovalSend")}
                 payload={{
                   overdue_count: escalation.overdue_count,
                   escalation_message: escalation.escalation_message,
@@ -229,15 +231,15 @@ export default function Rfis() {
             )}
             {escalation.items.length > 0 && (
               <div>
-                <div className="mb-2 text-xs font-medium text-slate-500">Overdue Items</div>
+                <div className="mb-2 text-xs font-medium text-slate-500">{t("rfi.overdueItems")}</div>
                 <div className="space-y-2">
                   {escalation.items.map((it, i) => (
                     <div key={i} className="rounded-lg border border-slate-200 p-3">
                       <div className="flex items-center justify-between">
                         <span className="font-mono text-xs text-slate-500">{it.rfi_number}</span>
                         <div className="flex items-center gap-2">
-                          <Badge tone="red">{it.days_overdue}d overdue</Badge>
-                          <Badge tone={statusTone(it.priority)}>{it.priority}</Badge>
+                          <Badge tone="red">{t("rfi.daysOverdue", { n: it.days_overdue })}</Badge>
+                          <Badge tone={statusTone(it.priority)}>{enumLabel(it.priority, t)}</Badge>
                         </div>
                       </div>
                       <div className="mt-1 text-sm font-medium text-slate-800">{it.subject}</div>
@@ -256,10 +258,10 @@ export default function Rfis() {
 
       {showCreate && (
         <CreateModal
-          title="New RFI"
+          title={t("rfi.new")}
           endpoint="/rfis"
-          fields={RFI_FIELDS}
-          submitLabel="Create RFI"
+          fields={rfiFields(t)}
+          submitLabel={t("rfi.createRfi")}
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
@@ -271,7 +273,7 @@ export default function Rfis() {
 
       {showImport && (
         <ImportModal
-          title="Import RFIs"
+          title={t("rfi.importTitle")}
           importPath="/rfis/import"
           templatePath="/rfis/import/template"
           templateFilename="rfis_template.csv"

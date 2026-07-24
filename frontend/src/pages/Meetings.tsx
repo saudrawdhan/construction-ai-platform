@@ -6,7 +6,8 @@ import ImportModal from "../components/ImportModal";
 import RowActions from "../components/RowActions";
 import ProjectPicker from "../components/ProjectPicker";
 import { useAuth } from "../lib/auth";
-import { date } from "../lib/format";
+import { date, enumLabel } from "../lib/format";
+import { useT, type Translate } from "../lib/i18n";
 import {
   Badge,
   Button,
@@ -61,11 +62,11 @@ interface MeetingSummary {
 
 const MEETING_TYPES = ["General", "Technical Coordination", "Safety Review", "Progress Review", "Client Meeting"];
 
-const MEETING_FIELDS = [
-  { name: "project_id", label: "Project", type: "project" as const, required: true },
-  { name: "title", label: "Title", required: true, full: true },
-  { name: "meeting_type", label: "Type", type: "select" as const, options: MEETING_TYPES, initial: "General" },
-  { name: "meeting_date", label: "Date", type: "date" as const },
+const meetingFields = (t: Translate) => [
+  { name: "project_id", label: t("common.project"), type: "project" as const, required: true },
+  { name: "title", label: t("col.title"), required: true, full: true },
+  { name: "meeting_type", label: t("field.type"), type: "select" as const, options: MEETING_TYPES, initial: "General" },
+  { name: "meeting_date", label: t("common.date"), type: "date" as const },
 ];
 
 interface ActionItemRow {
@@ -84,6 +85,7 @@ interface DecisionRow {
 
 export default function Meetings() {
   const { user } = useAuth();
+  const t = useT();
   const canSummarize = !!user && ["admin", "project_manager", "qa_qc"].includes(user.role);
   const [data, setData] = useState<Page<Meeting>>();
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -123,11 +125,11 @@ export default function Meetings() {
 
   return (
     <div>
-      <PageHeader title="Meetings" subtitle="Meeting records and AI minutes summarization" />
+      <PageHeader title={t("nav.meetings")} subtitle={t("mt.subtitle")} />
 
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <FilterBar>
-          <Field label="Project">
+          <Field label={t("common.project")}>
             <div className="w-56">
               <ProjectPicker
                 projects={projects}
@@ -143,13 +145,13 @@ export default function Meetings() {
         {canSummarize && (
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setShowImport(true)}>
-              <Upload size={15} /> Import
+              <Upload size={15} /> {t("common.import")}
             </Button>
             <Button variant="secondary" onClick={() => setShowCreate(true)}>
-              <Plus size={15} /> New Meeting
+              <Plus size={15} /> {t("mt.new")}
             </Button>
             <Button onClick={() => setOpen(true)}>
-              <Sparkles size={15} /> Summarize Notes
+              <Sparkles size={15} /> {t("mt.summarizeNotes")}
             </Button>
           </div>
         )}
@@ -160,28 +162,28 @@ export default function Meetings() {
 
       {data && (
         <Card>
-          <Table head={["Title", "Type", "Project", "Date", ""]}>
+          <Table head={[t("col.title"), t("col.type"), t("col.project"), t("col.date"), ""]}>
             {data.items.map((m) => (
               <tr key={m.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3">
                   <button
                     onClick={() => openDetail(m)}
-                    className="text-left font-medium text-slate-800 hover:text-blue-700 hover:underline"
+                    className="text-start font-medium text-slate-800 hover:text-blue-700 hover:underline"
                   >
                     {m.title}
                   </button>
                 </td>
                 <td className="px-4 py-3">
-                  <Badge tone="slate">{m.meeting_type}</Badge>
+                  <Badge tone="slate">{enumLabel(m.meeting_type, t)}</Badge>
                 </td>
                 <td className="px-4 py-3 text-slate-600">{projectName(m.project_id)}</td>
                 <td className="px-4 py-3 text-slate-600">{date(m.meeting_date)}</td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-end">
                   <RowActions
                     record={m}
-                    entityLabel="Meeting"
+                    entityLabel={t("entity.meeting")}
                     endpoint="/meetings"
-                    fields={MEETING_FIELDS}
+                    fields={meetingFields(t)}
                     canManage={canSummarize}
                     onChanged={() => setRefresh((n) => n + 1)}
                   />
@@ -189,7 +191,7 @@ export default function Meetings() {
               </tr>
             ))}
           </Table>
-          {data.items.length === 0 && <EmptyState message="No meetings match this filter." />}
+          {data.items.length === 0 && <EmptyState message={t("mt.noneMatch")} />}
           <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
         </Card>
       )}
@@ -198,7 +200,7 @@ export default function Meetings() {
         <Modal title={detail.meeting.title} onClose={() => setDetail(undefined)}>
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm text-slate-500">
-              <Badge tone="slate">{detail.meeting.meeting_type}</Badge>
+              <Badge tone="slate">{enumLabel(detail.meeting.meeting_type, t)}</Badge>
               <span>{projectName(detail.meeting.project_id)}</span>
               <span>·</span>
               <span>{date(detail.meeting.meeting_date)}</span>
@@ -206,22 +208,22 @@ export default function Meetings() {
 
             <div>
               <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                <ListChecks size={13} /> Action Items ({detail.actions.length})
+                <ListChecks size={13} /> {t("mt.actionItems", { n: detail.actions.length })}
               </div>
               {detail.actions.length === 0 ? (
-                <p className="text-sm text-slate-400">No action items recorded for this meeting.</p>
+                <p className="text-sm text-slate-400">{t("mt.noActionItems")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {detail.actions.map((a) => (
                     <div key={a.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-slate-700">{a.description}</span>
-                        <Badge tone={statusTone(a.status)}>{a.status}</Badge>
+                        <Badge tone={statusTone(a.status)}>{enumLabel(a.status, t)}</Badge>
                       </div>
                       {(a.owner || a.due_date) && (
                         <div className="mt-0.5 text-xs text-slate-400">
-                          {a.owner ?? "unassigned"}
-                          {a.due_date ? ` · due ${date(a.due_date)}` : ""}
+                          {a.owner ?? t("mt.unassigned")}
+                          {a.due_date ? t("mt.dueSuffix", { date: date(a.due_date) }) : ""}
                         </div>
                       )}
                     </div>
@@ -231,9 +233,9 @@ export default function Meetings() {
             </div>
 
             <div>
-              <div className="mb-2 text-xs font-medium text-slate-500">Decisions ({detail.decisions.length})</div>
+              <div className="mb-2 text-xs font-medium text-slate-500">{t("mt.decisions", { n: detail.decisions.length })}</div>
               {detail.decisions.length === 0 ? (
-                <p className="text-sm text-slate-400">No decisions recorded for this meeting.</p>
+                <p className="text-sm text-slate-400">{t("mt.noDecisions")}</p>
               ) : (
                 <ul className="list-inside list-disc space-y-1 text-sm text-slate-700">
                   {detail.decisions.map((d) => (
@@ -257,10 +259,10 @@ export default function Meetings() {
 
       {showCreate && (
         <CreateModal
-          title="New Meeting"
+          title={t("mt.new")}
           endpoint="/meetings"
-          fields={MEETING_FIELDS}
-          submitLabel="Create Meeting"
+          fields={meetingFields(t)}
+          submitLabel={t("mt.createMeeting")}
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
@@ -272,7 +274,7 @@ export default function Meetings() {
 
       {showImport && (
         <ImportModal
-          title="Import Meetings"
+          title={t("mt.importTitle")}
           importPath="/meetings/import"
           templatePath="/meetings/import/template"
           templateFilename="meetings_template.csv"
@@ -288,6 +290,7 @@ export default function Meetings() {
 }
 
 function SummarizeModal({ projects, onClose }: { projects: ProjectOption[]; onClose: () => void }) {
+  const t = useT();
   const [projectId, setProjectId] = useState("");
   const [title, setTitle] = useState("Project Meeting");
   const [meetingType, setMeetingType] = useState("General");
@@ -320,36 +323,36 @@ function SummarizeModal({ projects, onClose }: { projects: ProjectOption[]; onCl
   }
 
   return (
-    <Modal title="Summarize Meeting Notes" onClose={onClose}>
+    <Modal title={t("mt.summarizeTitle")} onClose={onClose}>
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Project">
+          <Field label={t("common.project")}>
             <ProjectPicker
               projects={projects}
               value={projectId}
               onChange={setProjectId}
-              placeholder="Select a project…"
+              placeholder={t("form.selectProject")}
               required
             />
           </Field>
-          <Field label="Meeting Type">
+          <Field label={t("field.meetingType")}>
             <Select value={meetingType} onChange={(e) => setMeetingType(e.target.value)}>
-              {MEETING_TYPES.map((t) => (
-                <option key={t}>{t}</option>
+              {MEETING_TYPES.map((mt) => (
+                <option key={mt} value={mt}>{enumLabel(mt, t)}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Title">
+          <Field label={t("col.title")}>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} />
           </Field>
-          <Field label="Date">
+          <Field label={t("common.date")}>
             <Input type="date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} />
           </Field>
         </div>
-        <Field label="Meeting notes / minutes">
+        <Field label={t("field.meetingNotes")}>
           <Textarea
             rows={6}
-            placeholder="Paste raw meeting minutes — the agent extracts a summary, action items with owners, decisions, and risks."
+            placeholder={t("mt.notesPlaceholder")}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
@@ -362,10 +365,10 @@ function SummarizeModal({ projects, onClose }: { projects: ProjectOption[]; onCl
               onChange={(e) => setStore(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300"
             />
-            Persist meeting, action items, decisions &amp; memory
+            {t("mt.persist")}
           </label>
           <Button disabled={busy || !projectId || notes.trim().length < 10} onClick={run}>
-            <Sparkles size={15} /> {busy ? "Summarizing…" : "Summarize"}
+            <Sparkles size={15} /> {busy ? t("mt.summarizing") : t("mt.summarize")}
           </Button>
         </div>
         {error && <div className="text-sm text-red-600">{error}</div>}
@@ -376,25 +379,24 @@ function SummarizeModal({ projects, onClose }: { projects: ProjectOption[]; onCl
               <ProviderTag provider={result.provider} model={result.model} />
               {result.meeting_id && (
                 <span className="text-xs text-slate-400">
-                  saved meeting #{result.meeting_id} · {result.stored_action_items} action items ·{" "}
-                  {result.stored_decisions} decisions
+                  {t("mt.savedMeeting", { id: result.meeting_id, a: result.stored_action_items, d: result.stored_decisions })}
                 </span>
               )}
             </div>
-            <LabelValue label="Summary" value={<p className="whitespace-pre-wrap">{result.summary}</p>} />
+            <LabelValue label={t("field.summary")} value={<p className="whitespace-pre-wrap">{result.summary}</p>} />
             {result.action_items.length > 0 && (
               <div>
                 <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                  <ListChecks size={13} /> Action Items
+                  <ListChecks size={13} /> {t("mt.actionItemsPlain")}
                 </div>
                 <div className="space-y-1.5">
                   {result.action_items.map((a, i) => (
                     <div key={i} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
                       <span className="text-slate-700">{a.description}</span>
                       {(a.owner || a.due_date) && (
-                        <span className="ml-1 text-xs text-slate-400">
-                          — {a.owner ?? "unassigned"}
-                          {a.due_date ? ` · due ${date(a.due_date)}` : ""}
+                        <span className="ms-1 text-xs text-slate-400">
+                          — {a.owner ?? t("mt.unassigned")}
+                          {a.due_date ? t("mt.dueSuffix", { date: date(a.due_date) }) : ""}
                         </span>
                       )}
                     </div>
@@ -404,7 +406,7 @@ function SummarizeModal({ projects, onClose }: { projects: ProjectOption[]; onCl
             )}
             {result.decisions.length > 0 && (
               <LabelValue
-                label="Decisions"
+                label={t("mt.decisionsPlain")}
                 value={
                   <ul className="list-inside list-disc text-slate-700">
                     {result.decisions.map((d, i) => (
@@ -419,7 +421,7 @@ function SummarizeModal({ projects, onClose }: { projects: ProjectOption[]; onCl
             )}
             {result.risks.length > 0 && (
               <LabelValue
-                label="Risks"
+                label={t("mt.risksPlain")}
                 value={
                   <div className="flex flex-wrap gap-1.5">
                     {result.risks.map((r, i) => (

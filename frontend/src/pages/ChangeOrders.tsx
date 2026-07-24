@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Plus, Upload } from "lucide-react";
 import { api, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { money } from "../lib/format";
+import { money, enumLabel } from "../lib/format";
+import { useT, type Translate } from "../lib/i18n";
 import {
   Badge,
   Button,
@@ -21,18 +22,18 @@ import CreateModal from "../components/CreateModal";
 import ImportModal from "../components/ImportModal";
 import RowActions from "../components/RowActions";
 
-const CHANGE_ORDER_FIELDS = [
-  { name: "project_id", label: "Project", type: "project" as const, required: true },
-  { name: "co_number", label: "Change order no.", required: true },
+const changeOrderFields = (t: Translate) => [
+  { name: "project_id", label: t("common.project"), type: "project" as const, required: true },
+  { name: "co_number", label: t("field.coNumber"), required: true },
   {
     name: "status",
-    label: "Status",
+    label: t("field.status"),
     type: "select" as const,
     options: ["Pending", "Under Review", "Approved", "Rejected"],
     initial: "Pending",
   },
-  { name: "value", label: "Value (SAR)", type: "number" as const, required: true },
-  { name: "description", label: "Description", type: "textarea" as const, required: true },
+  { name: "value", label: t("field.valueSar"), type: "number" as const, required: true },
+  { name: "description", label: t("field.description"), type: "textarea" as const, required: true },
 ];
 
 const STATUSES = ["Pending", "Under Review", "Approved", "Rejected"];
@@ -48,6 +49,7 @@ interface ChangeOrder {
 
 export default function ChangeOrders() {
   const { user } = useAuth();
+  const t = useT();
   const canManage = !!user && ["admin", "project_manager"].includes(user.role);
   const [data, setData] = useState<Page<ChangeOrder>>();
   const [error, setError] = useState<string>();
@@ -70,21 +72,21 @@ export default function ChangeOrders() {
   return (
     <div>
       <div className="flex items-start justify-between">
-        <PageHeader title="Change Orders" subtitle="Scope and value variations against project contracts" />
+        <PageHeader title={t("nav.changeOrders")} subtitle={t("co.subtitle")} />
         {canManage && (
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setShowImport(true)}>
-              <Upload size={16} /> Import
+              <Upload size={16} /> {t("common.import")}
             </Button>
             <Button onClick={() => setShowCreate(true)}>
-              <Plus size={16} /> New Change Order
+              <Plus size={16} /> {t("co.new")}
             </Button>
           </div>
         )}
       </div>
 
       <FilterBar>
-        <Field label="Status">
+        <Field label={t("field.status")}>
           <Select
             value={status}
             onChange={(e) => {
@@ -92,9 +94,9 @@ export default function ChangeOrders() {
               setPage(1);
             }}
           >
-            <option value="">All statuses</option>
+            <option value="">{t("project.allStatuses")}</option>
             {STATUSES.map((s) => (
-              <option key={s}>{s}</option>
+              <option key={s} value={s}>{enumLabel(s, t)}</option>
             ))}
           </Select>
         </Field>
@@ -105,7 +107,7 @@ export default function ChangeOrders() {
 
       {data && (
         <Card>
-          <Table head={["Change Order", "Description", "Value", "Status", ""]}>
+          <Table head={[t("col.changeOrder"), t("col.description"), t("col.value"), t("col.status"), ""]}>
             {data.items.map((co) => (
               <tr key={co.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{co.co_number}</td>
@@ -114,14 +116,14 @@ export default function ChangeOrders() {
                 </td>
                 <td className="px-4 py-3 font-medium text-slate-800">{money(co.value)}</td>
                 <td className="px-4 py-3">
-                  <Badge tone={statusTone(co.status)}>{co.status}</Badge>
+                  <Badge tone={statusTone(co.status)}>{enumLabel(co.status, t)}</Badge>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-end">
                   <RowActions
                     record={co}
-                    entityLabel="Change Order"
+                    entityLabel={t("entity.changeOrder")}
                     endpoint="/change-orders"
-                    fields={CHANGE_ORDER_FIELDS}
+                    fields={changeOrderFields(t)}
                     canManage={canManage}
                     onChanged={() => setRefresh((n) => n + 1)}
                   />
@@ -133,10 +135,10 @@ export default function ChangeOrders() {
             <EmptyState
               message={
                 status
-                  ? "No change orders match this filter."
+                  ? t("co.noneMatch")
                   : canManage
-                    ? "No change orders yet. Use “New Change Order” to add one."
-                    : "No change orders yet."
+                    ? t("co.noneYetCreate")
+                    : t("co.noneYet")
               }
             />
           )}
@@ -146,10 +148,10 @@ export default function ChangeOrders() {
 
       {showCreate && (
         <CreateModal
-          title="New Change Order"
+          title={t("co.new")}
           endpoint="/change-orders"
-          fields={CHANGE_ORDER_FIELDS}
-          submitLabel="Create Change Order"
+          fields={changeOrderFields(t)}
+          submitLabel={t("co.createCo")}
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
@@ -161,7 +163,7 @@ export default function ChangeOrders() {
 
       {showImport && (
         <ImportModal
-          title="Import Change Orders"
+          title={t("co.importTitle")}
           importPath="/change-orders/import"
           templatePath="/change-orders/import/template"
           templateFilename="change_orders_template.csv"

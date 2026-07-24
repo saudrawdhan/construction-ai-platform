@@ -12,11 +12,11 @@ import {
 } from "lucide-react";
 import { api, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { money } from "../lib/format";
+import { money, enumLabel } from "../lib/format";
+import { useT, type Translate } from "../lib/i18n";
 import {
   Button,
   Card,
-  EmptyState,
   PageHeader,
   StatCard,
   Badge,
@@ -49,6 +49,7 @@ async function total(path: string): Promise<number> {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const t = useT();
   const canCreate = !!user && ["admin", "project_manager"].includes(user.role);
   const [stats, setStats] = useState<Record<string, number>>();
   const [delayed, setDelayed] = useState<Project[]>([]);
@@ -80,37 +81,37 @@ export default function Dashboard() {
 
   return (
     <div>
-      <PageHeader title="Executive Dashboard" subtitle="Portfolio health across all projects" />
+      <PageHeader title={t("dashboard.title")} subtitle={t("dashboard.subtitle")} />
 
       {stats.projects === 0 ? (
-        <EmptyWorkspace canCreate={canCreate} hasSuppliers={stats.suppliers > 0} />
+        <EmptyWorkspace canCreate={canCreate} hasSuppliers={stats.suppliers > 0} t={t} />
       ) : (
         <>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
-            <StatCard label="Projects" value={stats.projects} icon={Building2} tone="blue" />
-            <StatCard label="Delayed / On Hold" value={stats.delayedOrHold} icon={AlertTriangle} tone="red" />
-            <StatCard label="Overdue RFIs" value={stats.rfis} icon={Clock} tone="amber" />
-            <StatCard label="Late POs" value={stats.latePo} icon={Truck} tone="amber" />
-            <StatCard label="Suppliers" value={stats.suppliers} icon={Users} tone="slate" />
-            <StatCard label="Claims" value={stats.claims} icon={Scale} tone="slate" />
+            <StatCard label={t("stat.projects")} value={stats.projects} icon={Building2} tone="blue" />
+            <StatCard label={t("stat.delayedOrHold")} value={stats.delayedOrHold} icon={AlertTriangle} tone="red" />
+            <StatCard label={t("stat.overdueRfis")} value={stats.rfis} icon={Clock} tone="amber" />
+            <StatCard label={t("stat.latePos")} value={stats.latePo} icon={Truck} tone="amber" />
+            <StatCard label={t("stat.suppliers")} value={stats.suppliers} icon={Users} tone="slate" />
+            <StatCard label={t("stat.claims")} value={stats.claims} icon={Scale} tone="slate" />
           </div>
 
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
             <Card>
               <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
-                Delayed &amp; On-Hold Projects
+                {t("dashboard.delayedProjects")}
               </div>
               {delayed.length === 0 ? (
-                <PositiveEmpty message="No delayed or on-hold projects — the portfolio is on track." />
+                <PositiveEmpty message={t("dashboard.noDelayed")} />
               ) : (
-                <Table head={["Code", "Project", "City", "Status", "Budget"]}>
+                <Table head={[t("col.code"), t("col.project"), t("col.city"), t("col.status"), t("col.budget")]}>
                   {delayed.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-mono text-xs text-slate-500">{p.project_code}</td>
                       <td className="px-4 py-3 font-medium text-slate-800">{p.project_name}</td>
                       <td className="px-4 py-3 text-slate-600">{p.city}</td>
                       <td className="px-4 py-3">
-                        <Badge tone={statusTone(p.status)}>{p.status}</Badge>
+                        <Badge tone={statusTone(p.status)}>{enumLabel(p.status, t)}</Badge>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{money(p.budget)}</td>
                     </tr>
@@ -121,12 +122,12 @@ export default function Dashboard() {
 
             <Card>
               <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-800">
-                Most Overdue RFIs
+                {t("dashboard.mostOverdueRfis")}
               </div>
               {overdue.length === 0 ? (
-                <PositiveEmpty message="No overdue RFIs — nothing needs escalation right now." />
+                <PositiveEmpty message={t("dashboard.noOverdue")} />
               ) : (
-                <Table head={["RFI", "Subject", "Discipline", "Due", "Priority"]}>
+                <Table head={[t("col.rfi"), t("col.subject"), t("col.discipline"), t("col.due"), t("col.priority")]}>
                   {overdue.map((r) => (
                     <tr key={r.rfi_number} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.rfi_number}</td>
@@ -134,7 +135,7 @@ export default function Dashboard() {
                       <td className="px-4 py-3 text-slate-600">{r.discipline}</td>
                       <td className="px-4 py-3 text-slate-600">{r.required_date}</td>
                       <td className="px-4 py-3">
-                        <Badge tone={statusTone(r.priority)}>{r.priority}</Badge>
+                        <Badge tone={statusTone(r.priority)}>{enumLabel(r.priority, t)}</Badge>
                       </td>
                     </tr>
                   ))}
@@ -157,35 +158,36 @@ function PositiveEmpty({ message }: { message: string }) {
   );
 }
 
-function EmptyWorkspace({ canCreate, hasSuppliers }: { canCreate: boolean; hasSuppliers: boolean }) {
+function EmptyWorkspace({
+  canCreate,
+  hasSuppliers,
+  t,
+}: {
+  canCreate: boolean;
+  hasSuppliers: boolean;
+  t: Translate;
+}) {
   return (
     <Card>
       <div className="mx-auto max-w-xl px-6 py-12 text-center">
         <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
           <Building2 size={26} />
         </span>
-        <h2 className="text-lg font-semibold text-slate-900">Your workspace is ready</h2>
-        <p className="mx-auto mt-2 text-sm text-slate-600">
-          No projects have been added yet. Once you create your first project, this dashboard tracks
-          portfolio health — delayed projects, overdue RFIs, late deliveries, and more — across
-          everything your company runs.
-        </p>
+        <h2 className="text-lg font-semibold text-slate-900">{t("dashboard.workspaceReady")}</h2>
+        <p className="mx-auto mt-2 text-sm text-slate-600">{t("dashboard.workspaceDesc")}</p>
         {canCreate ? (
           <div className="mt-6 flex flex-col items-center gap-3">
             <Link to="/projects">
               <Button>
-                Create your first project <ArrowRight size={16} />
+                {t("dashboard.createFirst")} <ArrowRight size={16} />
               </Button>
             </Link>
             <p className="text-xs text-slate-400">
-              You can also import projects{hasSuppliers ? "" : " and suppliers"} in bulk from a CSV or
-              Excel file from their pages.
+              {t("dashboard.importHint", { extra: hasSuppliers ? "" : t("dashboard.andSuppliers") })}
             </p>
           </div>
         ) : (
-          <p className="mt-6 text-sm text-slate-500">
-            Ask an administrator or project manager to add the first project.
-          </p>
+          <p className="mt-6 text-sm text-slate-500">{t("dashboard.askAdmin")}</p>
         )}
       </div>
     </Card>

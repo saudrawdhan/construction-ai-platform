@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Sparkles, Gauge, Activity, Plus, Upload } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { date } from "../lib/format";
+import { date, enumLabel } from "../lib/format";
+import { useT, type Translate } from "../lib/i18n";
 import {
   Badge,
   Button,
@@ -33,43 +34,43 @@ const MATERIAL_CATEGORIES = [
   "Civil", "Concrete", "Steel", "MEP", "Electrical", "Plumbing", "HVAC", "Facade", "Finishing", "Safety",
 ];
 
-const PURCHASE_REQUEST_FIELDS = [
-  { name: "project_id", label: "Project", type: "project" as const, required: true },
-  { name: "request_no", label: "Request no.", required: true },
+const purchaseRequestFields = (t: Translate) => [
+  { name: "project_id", label: t("common.project"), type: "project" as const, required: true },
+  { name: "request_no", label: t("field.requestNo"), required: true },
   {
     name: "material_category",
-    label: "Material category",
+    label: t("field.materialCategory"),
     type: "select" as const,
     options: MATERIAL_CATEGORIES,
     initial: "Steel",
   },
   {
     name: "status",
-    label: "Status",
+    label: t("field.status"),
     type: "select" as const,
     options: ["Under Review", "Approved", "Rejected", "Needs Rework"],
     initial: "Under Review",
   },
-  { name: "specification", label: "Specification", type: "textarea" as const },
-  { name: "required_delivery_date", label: "Required delivery", type: "date" as const },
+  { name: "specification", label: t("field.specification"), type: "textarea" as const },
+  { name: "required_delivery_date", label: t("field.requiredDelivery"), type: "date" as const },
 ];
 
-const SUPPLIER_FIELDS = [
-  { name: "supplier_name", label: "Supplier name", required: true, full: true },
-  { name: "category", label: "Category", type: "select" as const, options: MATERIAL_CATEGORIES, initial: "Civil" },
-  { name: "city", label: "City", required: true },
-  { name: "status", label: "Status", type: "select" as const, options: ["Active", "Inactive"], initial: "Active" },
+const supplierFields = (t: Translate) => [
+  { name: "supplier_name", label: t("field.supplierName"), required: true, full: true },
+  { name: "category", label: t("field.category"), type: "select" as const, options: MATERIAL_CATEGORIES, initial: "Civil" },
+  { name: "city", label: t("field.city"), required: true },
+  { name: "status", label: t("field.status"), type: "select" as const, options: ["Active", "Inactive"], initial: "Active" },
 ];
 
 // Edit-only fields for a purchase order (its project/supplier/request links are fixed; lateness is
 // recomputed server-side from the delivery dates).
-const PURCHASE_ORDER_EDIT_FIELDS = [
-  { name: "po_number", label: "PO number", required: true },
-  { name: "status", label: "Status", type: "select" as const, options: ["Issued", "Delivered", "Cancelled"] },
-  { name: "issue_date", label: "Issue date", type: "date" as const },
-  { name: "promised_delivery", label: "Promised delivery", type: "date" as const },
-  { name: "actual_delivery", label: "Actual delivery", type: "date" as const },
-  { name: "delay_root_cause", label: "Delay root cause", full: true },
+const purchaseOrderEditFields = (t: Translate) => [
+  { name: "po_number", label: t("field.poNumber"), required: true },
+  { name: "status", label: t("field.status"), type: "select" as const, options: ["Issued", "Delivered", "Cancelled"] },
+  { name: "issue_date", label: t("field.issueDate"), type: "date" as const },
+  { name: "promised_delivery", label: t("field.promisedDelivery"), type: "date" as const },
+  { name: "actual_delivery", label: t("field.actualDelivery"), type: "date" as const },
+  { name: "delay_root_cause", label: t("field.delayRootCause"), full: true },
 ];
 
 interface PurchaseRequest {
@@ -143,15 +144,16 @@ interface SupplierPerformance {
 type Tab = "requests" | "orders" | "suppliers";
 
 export default function Procurement() {
+  const t = useT();
   const [tab, setTab] = useState<Tab>("requests");
   return (
     <div>
-      <PageHeader title="Procurement" subtitle="Purchase requests, orders, and supplier intelligence" />
+      <PageHeader title={t("nav.procurement")} subtitle={t("proc.subtitle")} />
       <Tabs
         tabs={[
-          { key: "requests", label: "Purchase Requests" },
-          { key: "orders", label: "Purchase Orders" },
-          { key: "suppliers", label: "Suppliers" },
+          { key: "requests", label: t("proc.tabRequests") },
+          { key: "orders", label: t("proc.tabOrders") },
+          { key: "suppliers", label: t("proc.tabSuppliers") },
         ]}
         active={tab}
         onChange={setTab}
@@ -165,6 +167,7 @@ export default function Procurement() {
 
 function Requests() {
   const { user } = useAuth();
+  const t = useT();
   const canAnalyze = !!user && ["admin", "procurement_officer", "project_manager"].includes(user.role);
   const [data, setData] = useState<Page<PurchaseRequest>>();
   const [error, setError] = useState<string>();
@@ -213,42 +216,42 @@ function Requests() {
             }}
             className="h-4 w-4 rounded border-slate-300"
           />
-          Incomplete requests only
+          {t("proc.incompleteOnly")}
         </label>
         {canAnalyze && (
           <>
             <Button variant="secondary" onClick={() => setShowImport(true)}>
-              <Upload size={16} /> Import
+              <Upload size={16} /> {t("common.import")}
             </Button>
             <Button onClick={() => setShowCreate(true)}>
-              <Plus size={16} /> New Request
+              <Plus size={16} /> {t("proc.newRequest")}
             </Button>
           </>
         )}
       </FilterBar>
       <Card>
-        <Table head={["Request", "Material", "Required By", "Status", "AI", ""]}>
+        <Table head={[t("col.request"), t("col.material"), t("col.requiredBy"), t("col.status"), t("col.ai"), ""]}>
           {data.items.map((pr) => (
             <tr key={pr.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-mono text-xs text-slate-500">{pr.request_no}</td>
-              <td className="px-4 py-3 text-slate-700">{pr.material_category ?? <span className="text-red-500">Missing</span>}</td>
+              <td className="px-4 py-3 text-slate-700">{pr.material_category ? enumLabel(pr.material_category, t) : <span className="text-red-500">{t("proc.missing")}</span>}</td>
               <td className="px-4 py-3 text-slate-600">{date(pr.required_delivery_date)}</td>
               <td className="px-4 py-3">
-                <Badge tone={statusTone(pr.status)}>{pr.status}</Badge>
+                <Badge tone={statusTone(pr.status)}>{enumLabel(pr.status, t)}</Badge>
               </td>
               <td className="px-4 py-3">
                 {canAnalyze && (
                   <Button variant="secondary" disabled={busy === pr.id} onClick={() => analyze(pr)}>
-                    <Sparkles size={14} /> {busy === pr.id ? "Analyzing…" : "Analyze"}
+                    <Sparkles size={14} /> {busy === pr.id ? t("proc.analyzing") : t("common.analyze")}
                   </Button>
                 )}
               </td>
-              <td className="px-4 py-3 text-right">
+              <td className="px-4 py-3 text-end">
                 <RowActions
                   record={pr}
-                  entityLabel="Purchase Request"
+                  entityLabel={t("entity.purchaseRequest")}
                   endpoint="/procurement/purchase-requests"
-                  fields={PURCHASE_REQUEST_FIELDS}
+                  fields={purchaseRequestFields(t)}
                   canManage={canAnalyze}
                   onChanged={() => setRefresh((n) => n + 1)}
                 />
@@ -256,22 +259,22 @@ function Requests() {
             </tr>
           ))}
         </Table>
-        {data.items.length === 0 && <EmptyState message="No purchase requests match this filter." />}
+        {data.items.length === 0 && <EmptyState message={t("proc.noRequests")} />}
         <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
       </Card>
 
       {review && (
-        <Modal title={`PR Review · ${review.request_no}`} onClose={() => setReview(undefined)}>
+        <Modal title={t("proc.prReviewTitle", { no: review.request_no })} onClose={() => setReview(undefined)}>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Badge tone={statusTone(review.risk_level)}>{review.risk_level} risk</Badge>
+              <Badge tone={statusTone(review.risk_level)}>{t("proc.riskSuffix", { level: enumLabel(review.risk_level, t) })}</Badge>
               <ProviderTag provider={review.provider} model={review.model} />
             </div>
-            <LabelValue label="Material Category" value={review.material_category ?? "Not specified"} />
-            <LabelValue label="Recommendation" value={review.recommendation} />
+            <LabelValue label={t("proc.materialCategory")} value={review.material_category ? enumLabel(review.material_category, t) : t("proc.notSpecified")} />
+            <LabelValue label={t("proc.recommendation")} value={review.recommendation} />
             {review.missing_information.length > 0 && (
               <LabelValue
-                label="Missing Information"
+                label={t("proc.missingInfo")}
                 value={
                   <ul className="list-inside list-disc text-red-600">
                     {review.missing_information.map((m, i) => (
@@ -283,7 +286,7 @@ function Requests() {
             )}
             {review.required_approvals.length > 0 && (
               <LabelValue
-                label="Required Approvals"
+                label={t("proc.requiredApprovals")}
                 value={
                   <div className="flex flex-wrap gap-1.5">
                     {review.required_approvals.map((a, i) => (
@@ -296,10 +299,10 @@ function Requests() {
               />
             )}
             {review.supplier_history_note && (
-              <LabelValue label="Supplier History" value={review.supplier_history_note} />
+              <LabelValue label={t("proc.supplierHistory")} value={review.supplier_history_note} />
             )}
             {review.memory_used.length > 0 && (
-              <div className="text-xs text-slate-400">Grounded on {review.memory_used.length} memory record(s)</div>
+              <div className="text-xs text-slate-400">{t("proc.groundedOn", { n: review.memory_used.length })}</div>
             )}
             <div className="border-t border-slate-100 pt-3">
               <RequestApprovalButton
@@ -319,10 +322,10 @@ function Requests() {
 
       {showCreate && (
         <CreateModal
-          title="New Purchase Request"
+          title={t("proc.newRequest")}
           endpoint="/procurement/purchase-requests"
-          fields={PURCHASE_REQUEST_FIELDS}
-          submitLabel="Create Request"
+          fields={purchaseRequestFields(t)}
+          submitLabel={t("proc.createRequest")}
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
@@ -334,7 +337,7 @@ function Requests() {
 
       {showImport && (
         <ImportModal
-          title="Import Purchase Requests"
+          title={t("proc.importRequests")}
           importPath="/procurement/purchase-requests/import"
           templatePath="/procurement/purchase-requests/import/template"
           templateFilename="purchase_requests_template.csv"
@@ -351,6 +354,7 @@ function Requests() {
 
 function Orders() {
   const { user } = useAuth();
+  const t = useT();
   const canManage = !!user && ["admin", "procurement_officer", "project_manager"].includes(user.role);
   const [data, setData] = useState<Page<PurchaseOrder>>();
   const [error, setError] = useState<string>();
@@ -384,43 +388,43 @@ function Orders() {
             }}
             className="h-4 w-4 rounded border-slate-300"
           />
-          Late deliveries only
+          {t("proc.lateOnly")}
         </label>
         {canManage && (
           <>
             <Button variant="secondary" onClick={() => setShowImport(true)}>
-              <Upload size={16} /> Import
+              <Upload size={16} /> {t("common.import")}
             </Button>
             <Button onClick={() => setShowForm(true)}>
-              <Plus size={16} /> New Order
+              <Plus size={16} /> {t("proc.newOrder")}
             </Button>
           </>
         )}
       </FilterBar>
       <Card>
-        <Table head={["PO", "Promised", "Delivered", "Status", "Delay", "Root Cause", ""]}>
+        <Table head={[t("col.po"), t("col.promised"), t("col.delivered"), t("col.status"), t("col.delay"), t("col.rootCause"), ""]}>
           {data.items.map((po) => (
             <tr key={po.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-mono text-xs text-slate-500">{po.po_number}</td>
               <td className="px-4 py-3 text-slate-600">{date(po.promised_delivery)}</td>
               <td className="px-4 py-3 text-slate-600">{date(po.actual_delivery)}</td>
               <td className="px-4 py-3">
-                <Badge tone={statusTone(po.status)}>{po.status}</Badge>
+                <Badge tone={statusTone(po.status)}>{enumLabel(po.status, t)}</Badge>
               </td>
               <td className="px-4 py-3">
                 {po.is_late ? (
-                  <span className="font-medium text-red-600">{po.delay_days}d late</span>
+                  <span className="font-medium text-red-600">{t("pd.daysLate", { n: po.delay_days })}</span>
                 ) : (
-                  <span className="text-emerald-600">On time</span>
+                  <span className="text-emerald-600">{t("pd.onTime")}</span>
                 )}
               </td>
               <td className="px-4 py-3 text-slate-600">{po.delay_root_cause ?? "—"}</td>
-              <td className="px-4 py-3 text-right">
+              <td className="px-4 py-3 text-end">
                 <RowActions
                   record={po}
-                  entityLabel="Purchase Order"
+                  entityLabel={t("col.po")}
                   endpoint="/procurement/purchase-orders"
-                  fields={PURCHASE_ORDER_EDIT_FIELDS}
+                  fields={purchaseOrderEditFields(t)}
                   canManage={canManage}
                   onChanged={() => setRefresh((n) => n + 1)}
                 />
@@ -432,10 +436,10 @@ function Orders() {
           <EmptyState
             message={
               lateOnly
-                ? "No late purchase orders."
+                ? t("proc.noLateOrders")
                 : canManage
-                  ? "No purchase orders yet. Use “New Order” to add one."
-                  : "No purchase orders yet."
+                  ? t("proc.noOrdersCreate")
+                  : t("proc.noOrders")
             }
           />
         )}
@@ -455,7 +459,7 @@ function Orders() {
 
       {showImport && (
         <ImportModal
-          title="Import Purchase Orders"
+          title={t("proc.importOrders")}
           importPath="/procurement/purchase-orders/import"
           templatePath="/procurement/purchase-orders/import/template"
           templateFilename="purchase_orders_template.csv"
@@ -486,6 +490,7 @@ interface PrOption {
  * vs. actual delivery dates, so they are not entered here.
  */
 function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const t = useT();
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [requests, setRequests] = useState<PrOption[]>([]);
@@ -547,25 +552,25 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   }
 
   return (
-    <Modal title="New Purchase Order" onClose={onClose}>
+    <Modal title={t("proc.newOrderTitle")} onClose={onClose}>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-        <Field label="Project">
+        <Field label={t("common.project")}>
           <ProjectPicker
             projects={projects}
             value={form.project_id}
             onChange={(v) => set("project_id", v)}
-            placeholder="Select a project…"
+            placeholder={t("form.selectProject")}
             required
           />
         </Field>
-        <Field label="Purchase request">
+        <Field label={t("field.purchaseRequest")}>
           <Select
             required
             value={form.pr_id}
             onChange={(e) => set("pr_id", e.target.value)}
             disabled={!form.project_id}
           >
-            <option value="">{form.project_id ? "Select a request…" : "Choose a project first"}</option>
+            <option value="">{form.project_id ? t("proc.selectRequest") : t("proc.chooseProjectFirst")}</option>
             {requests.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.request_no}
@@ -573,9 +578,9 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
             ))}
           </Select>
         </Field>
-        <Field label="Supplier">
+        <Field label={t("field.supplier")}>
           <Select required value={form.supplier_id} onChange={(e) => set("supplier_id", e.target.value)}>
-            <option value="">Select a supplier…</option>
+            <option value="">{t("proc.selectSupplier")}</option>
             {suppliers.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.supplier_name}
@@ -583,27 +588,27 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
             ))}
           </Select>
         </Field>
-        <Field label="PO number">
+        <Field label={t("field.poNumber")}>
           <Input required value={form.po_number} onChange={(e) => set("po_number", e.target.value)} />
         </Field>
-        <Field label="Issue date">
+        <Field label={t("field.issueDate")}>
           <Input type="date" value={form.issue_date} onChange={(e) => set("issue_date", e.target.value)} />
         </Field>
-        <Field label="Status">
+        <Field label={t("field.status")}>
           <Select value={form.status} onChange={(e) => set("status", e.target.value)}>
             {["Issued", "Delivered", "Cancelled"].map((s) => (
-              <option key={s}>{s}</option>
+              <option key={s} value={s}>{enumLabel(s, t)}</option>
             ))}
           </Select>
         </Field>
-        <Field label="Promised delivery">
+        <Field label={t("field.promisedDelivery")}>
           <Input
             type="date"
             value={form.promised_delivery}
             onChange={(e) => set("promised_delivery", e.target.value)}
           />
         </Field>
-        <Field label="Actual delivery">
+        <Field label={t("field.actualDelivery")}>
           <Input
             type="date"
             value={form.actual_delivery}
@@ -611,7 +616,7 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
           />
         </Field>
         <div className="sm:col-span-2">
-          <Field label="Delay root cause (optional)">
+          <Field label={t("field.delayRootCauseOptional")}>
             <Input value={form.delay_root_cause} onChange={(e) => set("delay_root_cause", e.target.value)} />
           </Field>
         </div>
@@ -619,10 +624,10 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
           {error && <ErrorBox message={error} />}
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={onClose}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "Creating…" : "Create Order"}
+              {saving ? t("project.creating") : t("proc.createOrder")}
             </Button>
           </div>
         </div>
@@ -633,6 +638,7 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
 function Suppliers() {
   const { user } = useAuth();
+  const t = useT();
   const canAssess = !!user && ["admin", "executive", "procurement_officer"].includes(user.role);
   const canManage = !!user && ["admin", "procurement_officer"].includes(user.role);
   const [data, setData] = useState<Page<Supplier>>();
@@ -684,7 +690,7 @@ function Suppliers() {
     <>
       {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
       <FilterBar>
-        <Field label="Category">
+        <Field label={t("field.category")}>
           <Select
             value={category}
             onChange={(e) => {
@@ -692,10 +698,10 @@ function Suppliers() {
               setPage(1);
             }}
           >
-            <option value="">All categories</option>
+            <option value="">{t("mem.allCategories")}</option>
             {["Civil", "Concrete", "Steel", "MEP", "Electrical", "Plumbing", "HVAC", "Facade", "Finishing", "Safety"].map(
               (c) => (
-                <option key={c}>{c}</option>
+                <option key={c} value={c}>{enumLabel(c, t)}</option>
               )
             )}
           </Select>
@@ -703,39 +709,39 @@ function Suppliers() {
         {canManage && (
           <>
             <Button variant="secondary" onClick={() => setShowImport(true)}>
-              <Upload size={16} /> Import
+              <Upload size={16} /> {t("common.import")}
             </Button>
             <Button onClick={() => setShowForm(true)}>
-              <Plus size={16} /> New Supplier
+              <Plus size={16} /> {t("proc.newSupplier")}
             </Button>
           </>
         )}
       </FilterBar>
       <Card>
-        <Table head={["Supplier", "Category", "City", "Status", "Actions"]}>
+        <Table head={[t("col.supplier"), t("col.category"), t("col.city"), t("col.status"), t("col.actions")]}>
           {data.items.map((s) => (
             <tr key={s.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-medium text-slate-800">{s.supplier_name}</td>
-              <td className="px-4 py-3 text-slate-600">{s.category}</td>
+              <td className="px-4 py-3 text-slate-600">{enumLabel(s.category, t)}</td>
               <td className="px-4 py-3 text-slate-600">{s.city}</td>
               <td className="px-4 py-3">
-                <Badge tone={statusTone(s.status)}>{s.status}</Badge>
+                <Badge tone={statusTone(s.status)}>{enumLabel(s.status, t)}</Badge>
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
                   <Button variant="secondary" disabled={busy === s.id} onClick={() => performance(s)}>
-                    <Activity size={14} /> Performance
+                    <Activity size={14} /> {t("proc.performance")}
                   </Button>
                   {canAssess && (
                     <Button variant="secondary" disabled={busy === s.id} onClick={() => assess(s)}>
-                      <Gauge size={14} /> Risk
+                      <Gauge size={14} /> {t("proc.risk")}
                     </Button>
                   )}
                   <RowActions
                     record={s}
-                    entityLabel="Supplier"
+                    entityLabel={t("entity.supplier")}
                     endpoint="/suppliers"
-                    fields={SUPPLIER_FIELDS}
+                    fields={supplierFields(t)}
                     canManage={canManage}
                     onChanged={load}
                   />
@@ -748,10 +754,10 @@ function Suppliers() {
           <EmptyState
             message={
               category
-                ? "No suppliers match this filter."
+                ? t("proc.noSuppliersMatch")
                 : canManage
-                  ? "No suppliers yet. Use “New Supplier” to add one."
-                  : "No suppliers yet."
+                  ? t("proc.noSuppliersCreate")
+                  : t("proc.noSuppliers")
             }
           />
         )}
@@ -759,18 +765,18 @@ function Suppliers() {
       </Card>
 
       {perf && (
-        <Modal title={`Performance · ${perf.supplier_name}`} onClose={() => setPerf(undefined)}>
+        <Modal title={t("proc.perfTitle", { name: perf.supplier_name })} onClose={() => setPerf(undefined)}>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <LabelValue label="Total POs" value={perf.total_purchase_orders} />
-            <LabelValue label="Late POs" value={perf.late_purchase_orders} />
-            <LabelValue label="On-time Rate" value={`${perf.on_time_rate.toFixed(1)}%`} />
-            <LabelValue label="Total Delay" value={`${perf.total_delay_days}d`} />
-            <LabelValue label="Avg Delay (late)" value={`${perf.average_delay_days_when_late.toFixed(1)}d`} />
-            <LabelValue label="NCRs" value={perf.ncr_count} />
+            <LabelValue label={t("proc.totalPos")} value={perf.total_purchase_orders} />
+            <LabelValue label={t("proc.latePos")} value={perf.late_purchase_orders} />
+            <LabelValue label={t("proc.onTimeRate")} value={`${perf.on_time_rate.toFixed(1)}%`} />
+            <LabelValue label={t("proc.totalDelay")} value={t("proc.daysUnit", { n: perf.total_delay_days })} />
+            <LabelValue label={t("proc.avgDelayLate")} value={t("proc.daysUnit", { n: perf.average_delay_days_when_late.toFixed(1) })} />
+            <LabelValue label={t("proc.ncrs")} value={perf.ncr_count} />
           </div>
           {perf.top_delay_causes.length > 0 && (
             <div className="mt-5">
-              <div className="mb-2 text-xs font-medium text-slate-500">Top Delay Causes</div>
+              <div className="mb-2 text-xs font-medium text-slate-500">{t("proc.topDelayCauses")}</div>
               <div className="space-y-1.5">
                 {perf.top_delay_causes.map((c, i) => (
                   <div key={i} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm">
@@ -785,22 +791,22 @@ function Suppliers() {
       )}
 
       {risk && (
-        <Modal title={`Risk Assessment · ${risk.supplier_name}`} onClose={() => setRisk(undefined)}>
+        <Modal title={t("proc.riskTitle", { name: risk.supplier_name })} onClose={() => setRisk(undefined)}>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Badge tone={statusTone(risk.risk_level)}>{risk.risk_level}</Badge>
-              <span className="text-sm text-slate-500">Score {risk.risk_score.toFixed(1)}</span>
+              <Badge tone={statusTone(risk.risk_level)}>{enumLabel(risk.risk_level, t)}</Badge>
+              <span className="text-sm text-slate-500">{t("proc.score", { n: risk.risk_score.toFixed(1) })}</span>
               <ProviderTag provider={risk.provider} model={risk.model} />
             </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <LabelValue label="On-time Rate" value={`${risk.on_time_rate.toFixed(1)}%`} />
-              <LabelValue label="Late POs" value={risk.late_purchase_orders} />
-              <LabelValue label="NCRs" value={risk.ncr_count} />
-              <LabelValue label="Total Delay" value={`${risk.total_delay_days}d`} />
+              <LabelValue label={t("proc.onTimeRate")} value={`${risk.on_time_rate.toFixed(1)}%`} />
+              <LabelValue label={t("proc.latePos")} value={risk.late_purchase_orders} />
+              <LabelValue label={t("proc.ncrs")} value={risk.ncr_count} />
+              <LabelValue label={t("proc.totalDelay")} value={t("proc.daysUnit", { n: risk.total_delay_days })} />
             </div>
             {risk.drivers.length > 0 && (
               <LabelValue
-                label="Risk Drivers"
+                label={t("proc.riskDrivers")}
                 value={
                   <ul className="list-inside list-disc text-slate-700">
                     {risk.drivers.map((d, i) => (
@@ -810,7 +816,7 @@ function Suppliers() {
                 }
               />
             )}
-            <LabelValue label="Recommendation" value={risk.recommendation} />
+            <LabelValue label={t("proc.recommendation")} value={risk.recommendation} />
             <div className="border-t border-slate-100 pt-3">
               <RequestApprovalButton
                 actionType="supplier_risk_mitigation"
@@ -839,7 +845,7 @@ function Suppliers() {
 
       {showImport && (
         <ImportModal
-          title="Import Suppliers"
+          title={t("proc.importSuppliers")}
           importPath="/suppliers/import"
           templatePath="/suppliers/import/template"
           templateFilename="suppliers_template.csv"
@@ -859,6 +865,7 @@ const SUPPLIER_CATEGORIES = [
 ];
 
 function NewSupplierModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const t = useT();
   const [form, setForm] = useState({
     supplier_name: "",
     category: "Civil",
@@ -885,27 +892,27 @@ function NewSupplierModal({ onClose, onCreated }: { onClose: () => void; onCreat
   }
 
   return (
-    <Modal title="New Supplier" onClose={onClose}>
+    <Modal title={t("proc.newSupplier")} onClose={onClose}>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <Field label="Supplier name">
+          <Field label={t("field.supplierName")}>
             <Input required value={form.supplier_name} onChange={(e) => set("supplier_name", e.target.value)} />
           </Field>
         </div>
-        <Field label="Category">
+        <Field label={t("field.category")}>
           <Select value={form.category} onChange={(e) => set("category", e.target.value)}>
             {SUPPLIER_CATEGORIES.map((c) => (
-              <option key={c}>{c}</option>
+              <option key={c} value={c}>{enumLabel(c, t)}</option>
             ))}
           </Select>
         </Field>
-        <Field label="City">
+        <Field label={t("field.city")}>
           <Input required value={form.city} onChange={(e) => set("city", e.target.value)} />
         </Field>
-        <Field label="Status">
+        <Field label={t("field.status")}>
           <Select value={form.status} onChange={(e) => set("status", e.target.value)}>
             {["Active", "Inactive"].map((s) => (
-              <option key={s}>{s}</option>
+              <option key={s} value={s}>{enumLabel(s, t)}</option>
             ))}
           </Select>
         </Field>
@@ -913,10 +920,10 @@ function NewSupplierModal({ onClose, onCreated }: { onClose: () => void; onCreat
           {error && <ErrorBox message={error} />}
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={onClose}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "Creating…" : "Create Supplier"}
+              {saving ? t("project.creating") : t("proc.createSupplier")}
             </Button>
           </div>
         </div>

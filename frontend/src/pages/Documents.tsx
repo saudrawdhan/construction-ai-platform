@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Search, Upload, FileText, Download, Trash2 } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { date } from "../lib/format";
+import { date, enumLabel } from "../lib/format";
+import { useT } from "../lib/i18n";
 import ProjectPicker from "../components/ProjectPicker";
 import {
   Badge,
@@ -69,6 +70,7 @@ type Tab = "search" | "upload" | "browse" | "generated";
 
 export default function Documents() {
   const { user } = useAuth();
+  const t = useT();
   const canUpload = !!user && user.role !== "viewer";
   const [tab, setTab] = useState<Tab>("search");
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -78,15 +80,15 @@ export default function Documents() {
   }, []);
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: "search", label: "Semantic Search" },
-    ...(canUpload ? [{ key: "upload" as Tab, label: "Upload" }] : []),
-    { key: "browse", label: "Browse" },
-    { key: "generated", label: "Generated" },
+    { key: "search", label: t("doc.tabSearch") },
+    ...(canUpload ? [{ key: "upload" as Tab, label: t("doc.tabUpload") }] : []),
+    { key: "browse", label: t("doc.tabBrowse") },
+    { key: "generated", label: t("doc.tabGenerated") },
   ];
 
   return (
     <div>
-      <PageHeader title="Documents" subtitle="Hybrid RAG search over the corpus and document ingestion" />
+      <PageHeader title={t("nav.documents")} subtitle={t("doc.subtitle")} />
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
       {tab === "search" && <SearchTab projects={projects} />}
       {tab === "upload" && canUpload && <UploadTab projects={projects} />}
@@ -99,6 +101,7 @@ export default function Documents() {
 const GENERATED_TYPES = ["email", "site_report", "meeting_minutes", "claim_thread"];
 
 function GeneratedTab({ projects }: { projects: ProjectOption[] }) {
+  const t = useT();
   const [data, setData] = useState<Page<GeneratedDocument>>();
   const [error, setError] = useState<string>();
   const [page, setPage] = useState(1);
@@ -120,7 +123,7 @@ function GeneratedTab({ projects }: { projects: ProjectOption[] }) {
   return (
     <>
       <FilterBar>
-        <Field label="Type">
+        <Field label={t("col.type")}>
           <Select
             value={docType}
             onChange={(e) => {
@@ -128,36 +131,36 @@ function GeneratedTab({ projects }: { projects: ProjectOption[] }) {
               setPage(1);
             }}
           >
-            <option value="">All types</option>
-            {GENERATED_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t.replace("_", " ")}
+            <option value="">{t("doc.allTypes")}</option>
+            {GENERATED_TYPES.map((gt) => (
+              <option key={gt} value={gt}>
+                {enumLabel(gt, t)}
               </option>
             ))}
           </Select>
         </Field>
       </FilterBar>
       <Card>
-        <Table head={["Subject", "Type", "Project", "Date"]}>
+        <Table head={[t("col.subject"), t("col.type"), t("col.project"), t("col.date")]}>
           {data.items.map((d) => (
             <tr key={d.id} className="hover:bg-slate-50">
               <td className="px-4 py-3">
                 <button
                   onClick={() => setSelected(d)}
-                  className="max-w-xl truncate text-left font-medium text-slate-800 hover:text-blue-700 hover:underline"
+                  className="max-w-xl truncate text-start font-medium text-slate-800 hover:text-blue-700 hover:underline"
                 >
                   {d.subject}
                 </button>
               </td>
               <td className="px-4 py-3">
-                <Badge tone="slate">{d.type.replace("_", " ")}</Badge>
+                <Badge tone="slate">{enumLabel(d.type, t)}</Badge>
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-slate-600">{projectName(d.project_id)}</td>
               <td className="whitespace-nowrap px-4 py-3 text-slate-600">{date(d.document_date)}</td>
             </tr>
           ))}
         </Table>
-        {data.items.length === 0 && <EmptyState message="No generated documents match this filter." />}
+        {data.items.length === 0 && <EmptyState message={t("doc.noneGenerated")} />}
         <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
       </Card>
 
@@ -165,10 +168,10 @@ function GeneratedTab({ projects }: { projects: ProjectOption[] }) {
         <Modal title={selected.subject} onClose={() => setSelected(undefined)}>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <LabelValue label="Type" value={selected.type.replace("_", " ")} />
-              <LabelValue label="Date" value={date(selected.document_date)} />
-              {selected.sender && <LabelValue label="From" value={selected.sender} />}
-              {selected.recipient && <LabelValue label="To" value={selected.recipient} />}
+              <LabelValue label={t("col.type")} value={enumLabel(selected.type, t)} />
+              <LabelValue label={t("col.date")} value={date(selected.document_date)} />
+              {selected.sender && <LabelValue label={t("doc.from")} value={selected.sender} />}
+              {selected.recipient && <LabelValue label={t("doc.to")} value={selected.recipient} />}
             </div>
             <div className="whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm text-slate-700">
               {selected.body}
@@ -181,6 +184,7 @@ function GeneratedTab({ projects }: { projects: ProjectOption[] }) {
 }
 
 function SearchTab({ projects }: { projects: ProjectOption[] }) {
+  const t = useT();
   const [q, setQ] = useState("");
   const [projectId, setProjectId] = useState("");
   const [results, setResults] = useState<SearchHit[]>();
@@ -209,21 +213,21 @@ function SearchTab({ projects }: { projects: ProjectOption[] }) {
   return (
     <>
       <form onSubmit={run} className="mb-4 flex flex-wrap items-end gap-3">
-        <Field label="Query">
+        <Field label={t("doc.query")}>
           <Input
             className="w-80"
-            placeholder="e.g. delayed steel delivery, unsafe work at height"
+            placeholder={t("doc.queryPlaceholder")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
         </Field>
-        <Field label="Project">
+        <Field label={t("common.project")}>
           <div className="w-56">
             <ProjectPicker projects={projects} value={projectId} onChange={setProjectId} />
           </div>
         </Field>
         <Button type="submit" disabled={busy || q.trim().length < 2}>
-          <Search size={15} /> {busy ? "Searching…" : "Search"}
+          <Search size={15} /> {busy ? t("doc.searching") : t("common.search")}
         </Button>
       </form>
 
@@ -234,17 +238,17 @@ function SearchTab({ projects }: { projects: ProjectOption[] }) {
             <div key={hit.id} className="rounded-lg border border-slate-200 p-4">
               <div className="mb-1 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Badge tone="blue">{hit.source_type.replace("_", " ")}</Badge>
+                  <Badge tone="blue">{enumLabel(hit.source_type, t)}</Badge>
                   <span className="text-xs text-slate-400">{projectName(hit.project_id)}</span>
                 </div>
-                <span className="text-xs font-medium text-blue-600">score {hit.score.toFixed(4)}</span>
+                <span className="text-xs font-medium text-blue-600">{t("doc.score", { n: hit.score.toFixed(4) })}</span>
               </div>
               <p className="text-sm text-slate-700">{hit.content}</p>
             </div>
           ))}
           {results.length === 0 && (
             <Card>
-              <EmptyState message="No matching passages found." />
+              <EmptyState message={t("doc.noPassages")} />
             </Card>
           )}
         </div>
@@ -254,6 +258,7 @@ function SearchTab({ projects }: { projects: ProjectOption[] }) {
 }
 
 function UploadTab({ projects }: { projects: ProjectOption[] }) {
+  const t = useT();
   const [projectId, setProjectId] = useState("");
   const [docType, setDocType] = useState("uploaded");
   const [title, setTitle] = useState("");
@@ -291,43 +296,46 @@ function UploadTab({ projects }: { projects: ProjectOption[] }) {
     <Card className="max-w-2xl p-5">
       <form onSubmit={submit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Project">
+          <Field label={t("common.project")}>
             <ProjectPicker
               projects={projects}
               value={projectId}
               onChange={setProjectId}
-              placeholder="Select a project…"
+              placeholder={t("form.selectProject")}
               required
             />
           </Field>
-          <Field label="Document type">
+          <Field label={t("doc.docType")}>
             <Input value={docType} onChange={(e) => setDocType(e.target.value)} placeholder="uploaded" />
           </Field>
         </div>
-        <Field label="Title (optional)">
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Defaults to the file name" />
+        <Field label={t("doc.titleOptional")}>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("doc.titlePlaceholder")} />
         </Field>
-        <Field label="File (PDF, DOCX, or text — max 10 MB)">
+        <Field label={t("doc.fileLabel")}>
           <input
             ref={fileRef}
             type="file"
             accept=".pdf,.docx,.txt,.md,.csv,.log"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+            className="block w-full text-sm text-slate-600 file:me-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
           />
         </Field>
         <Button type="submit" disabled={busy || !projectId || !file}>
-          <Upload size={15} /> {busy ? "Ingesting…" : "Upload & Index"}
+          <Upload size={15} /> {busy ? t("doc.ingesting") : t("doc.uploadIndex")}
         </Button>
         {error && <div className="text-sm text-red-600">{error}</div>}
       </form>
 
       {result && (
         <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          <div className="font-medium">Indexed “{result.title}”</div>
+          <div className="font-medium">{t("doc.indexed", { title: result.title })}</div>
           <div className="mt-1 text-emerald-700">
-            {result.characters.toLocaleString()} characters · {result.chunks_indexed} chunk(s) embedded ·
-            document #{result.document_id}. It is now searchable and available to the copilot.
+            {t("doc.indexedDetail", {
+              chars: result.characters.toLocaleString(),
+              chunks: result.chunks_indexed,
+              id: result.document_id,
+            })}
           </div>
         </div>
       )}
@@ -336,6 +344,7 @@ function UploadTab({ projects }: { projects: ProjectOption[] }) {
 }
 
 function BrowseTab({ projects, canManage }: { projects: ProjectOption[]; canManage: boolean }) {
+  const t = useT();
   const [data, setData] = useState<Page<Document>>();
   const [error, setError] = useState<string>();
   const [page, setPage] = useState(1);
@@ -376,11 +385,7 @@ function BrowseTab({ projects, canManage }: { projects: ProjectOption[]; canMana
       setReloadKey((k) => k + 1);
     } catch (e) {
       const err = e as ApiError;
-      setError(
-        err.status === 409
-          ? "This document is cited as claim evidence and cannot be deleted."
-          : err.message
-      );
+      setError(err.status === 409 ? t("doc.cited409") : err.message);
     } finally {
       setDeleting(false);
     }
@@ -392,7 +397,7 @@ function BrowseTab({ projects, canManage }: { projects: ProjectOption[]; canMana
   return (
     <>
       <FilterBar>
-        <Field label="Project">
+        <Field label={t("common.project")}>
           <div className="w-56">
             <ProjectPicker
               projects={projects}
@@ -407,7 +412,7 @@ function BrowseTab({ projects, canManage }: { projects: ProjectOption[]; canMana
       </FilterBar>
       {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
       <Card>
-        <Table head={["Title", "Type", "Project", "Date", ""]}>
+        <Table head={[t("col.title"), t("col.type"), t("col.project"), t("col.date"), ""]}>
           {data.items.map((d) => (
             <tr key={d.id} className="hover:bg-slate-50">
               <td className="px-4 py-3">
@@ -418,11 +423,11 @@ function BrowseTab({ projects, canManage }: { projects: ProjectOption[]; canMana
                 <div className="mt-0.5 max-w-xl truncate text-xs text-slate-500">{d.content_summary}</div>
               </td>
               <td className="px-4 py-3">
-                <Badge tone="slate">{d.doc_type}</Badge>
+                <Badge tone="slate">{enumLabel(d.doc_type, t)}</Badge>
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-slate-600">{projectName(d.project_id)}</td>
               <td className="whitespace-nowrap px-4 py-3 text-slate-600">{date(d.doc_date)}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-right">
+              <td className="whitespace-nowrap px-4 py-3 text-end">
                 <div className="flex items-center justify-end gap-1.5">
                   {d.has_file && (
                     <Button
@@ -430,7 +435,7 @@ function BrowseTab({ projects, canManage }: { projects: ProjectOption[]; canMana
                       onClick={() => downloadDocument(d)}
                       disabled={downloadingId === d.id}
                     >
-                      <Download size={14} /> {downloadingId === d.id ? "Downloading…" : "Download"}
+                      <Download size={14} /> {downloadingId === d.id ? t("doc.downloading") : t("common.download")}
                     </Button>
                   )}
                   {canManage && (
@@ -441,7 +446,7 @@ function BrowseTab({ projects, canManage }: { projects: ProjectOption[]; canMana
                         setError(undefined);
                         setConfirmDelete(d);
                       }}
-                      aria-label="Delete"
+                      aria-label={t("common.delete")}
                     >
                       <Trash2 size={15} />
                     </Button>
@@ -451,24 +456,23 @@ function BrowseTab({ projects, canManage }: { projects: ProjectOption[]; canMana
             </tr>
           ))}
         </Table>
-        {data.items.length === 0 && <EmptyState message="No documents match this filter." />}
+        {data.items.length === 0 && <EmptyState message={t("doc.noneBrowse")} />}
         <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
       </Card>
 
       {confirmDelete && (
-        <Modal title="Delete Document" onClose={() => setConfirmDelete(undefined)}>
+        <Modal title={t("doc.deleteTitle")} onClose={() => setConfirmDelete(undefined)}>
           <div className="space-y-4">
             <p className="text-sm text-slate-600">
-              This will permanently delete “{confirmDelete.title}”, its indexed search chunks, and its
-              stored file. This action cannot be undone.
+              {t("doc.confirmDelete", { title: confirmDelete.title })}
             </p>
             {error && <div className="text-sm text-red-600">{error}</div>}
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setConfirmDelete(undefined)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button variant="danger" disabled={deleting} onClick={deleteDocument}>
-                {deleting ? "Deleting…" : "Delete"}
+                {deleting ? t("rowActions.deleting") : t("common.delete")}
               </Button>
             </div>
           </div>

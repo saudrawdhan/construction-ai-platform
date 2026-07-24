@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { HardHat } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import { useT } from "../lib/i18n";
 
 export default function Login() {
   const { login } = useAuth();
+  const t = useT();
   const [email, setEmail] = useState("executive@construction-ops.com");
   const [password, setPassword] = useState("Passw0rd!");
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +18,7 @@ export default function Login() {
     try {
       await login(email, password);
     } catch {
-      setError("Incorrect email or password.");
+      setError(t("login.error"));
     } finally {
       setBusy(false);
     }
@@ -30,13 +32,13 @@ export default function Login() {
             <HardHat size={24} />
           </span>
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">Construction AI</h1>
-            <p className="text-sm text-slate-500">Operations Intelligence Platform</p>
+            <h1 className="text-lg font-semibold text-slate-900">{t("login.title")}</h1>
+            <p className="text-sm text-slate-500">{t("login.subtitle")}</p>
           </div>
         </div>
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">{t("login.email")}</label>
             <input
               type="email"
               value={email}
@@ -45,7 +47,7 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Password</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">{t("login.password")}</label>
             <input
               type="password"
               value={password}
@@ -59,12 +61,10 @@ export default function Login() {
             disabled={busy}
             className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
           >
-            {busy ? "Signing in…" : "Sign in"}
+            {busy ? t("login.signingIn") : t("login.signIn")}
           </button>
         </form>
-        <p className="mt-4 text-center text-xs text-slate-400">
-          Demo accounts: admin / executive / pm / procurement @construction-ops.com · Passw0rd!
-        </p>
+        <p className="mt-4 text-center text-xs text-slate-400">{t("login.demoAccounts")}</p>
       </div>
     </div>
   );

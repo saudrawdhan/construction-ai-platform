@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, X, History } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { dateTime, titleCase } from "../lib/format";
+import { dateTime, titleCase, enumLabel } from "../lib/format";
+import { useT } from "../lib/i18n";
 import {
   Badge,
   Button,
@@ -43,6 +44,7 @@ interface HistoryEntry {
 
 export default function Approvals() {
   const { user } = useAuth();
+  const t = useT();
   const canResolve = !!user && ["admin", "executive", "project_manager"].includes(user.role);
   const [data, setData] = useState<Page<Approval>>();
   const [error, setError] = useState<string>();
@@ -91,10 +93,10 @@ export default function Approvals() {
 
   return (
     <div>
-      <PageHeader title="Approvals" subtitle="Human-in-the-loop gate for high-risk AI-recommended actions" />
+      <PageHeader title={t("nav.approvals")} subtitle={t("approvals.subtitle")} />
 
       <FilterBar>
-        <Field label="Status">
+        <Field label={t("field.status")}>
           <Select
             value={status}
             onChange={(e) => {
@@ -104,7 +106,7 @@ export default function Approvals() {
           >
             {["pending", "approved", "rejected", ""].map((s) => (
               <option key={s} value={s}>
-                {s ? titleCase(s) : "All"}
+                {s ? enumLabel(s, t) : t("common.all")}
               </option>
             ))}
           </Select>
@@ -116,23 +118,23 @@ export default function Approvals() {
 
       {data && (
         <Card>
-          <Table head={["Action", "Risk", "Requested By", "Status", "Created", ""]}>
+          <Table head={[t("col.action"), t("col.risk"), t("col.requestedBy"), t("col.status"), t("col.created"), ""]}>
             {data.items.map((a) => (
               <tr key={a.id} className="cursor-pointer hover:bg-slate-50" onClick={() => open(a)}>
                 <td className="px-4 py-3 font-medium text-slate-800">{titleCase(a.action_type)}</td>
                 <td className="px-4 py-3">
-                  <Badge tone={statusTone(a.risk_level)}>{a.risk_level}</Badge>
+                  <Badge tone={statusTone(a.risk_level)}>{enumLabel(a.risk_level, t)}</Badge>
                 </td>
                 <td className="px-4 py-3 text-slate-600">{a.requested_by}</td>
                 <td className="px-4 py-3">
-                  <Badge tone={statusTone(a.status)}>{a.status}</Badge>
+                  <Badge tone={statusTone(a.status)}>{enumLabel(a.status, t)}</Badge>
                 </td>
                 <td className="px-4 py-3 text-slate-600">{dateTime(a.created_at)}</td>
-                <td className="px-4 py-3 text-right text-xs text-blue-600">Review →</td>
+                <td className="px-4 py-3 text-end text-xs text-blue-600">{t("approvals.review")}</td>
               </tr>
             ))}
           </Table>
-          {data.items.length === 0 && <EmptyState message="No approval requests in this view." />}
+          {data.items.length === 0 && <EmptyState message={t("approvals.noneView")} />}
           <Pagination page={data.page} pages={data.pages} total={data.total} onPage={setPage} />
         </Card>
       )}
@@ -141,17 +143,17 @@ export default function Approvals() {
         <Modal title={titleCase(selected.action_type)} onClose={() => setSelected(undefined)}>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <LabelValue label="Risk Level" value={<Badge tone={statusTone(selected.risk_level)}>{selected.risk_level}</Badge>} />
-              <LabelValue label="Status" value={<Badge tone={statusTone(selected.status)}>{selected.status}</Badge>} />
-              <LabelValue label="Requested By" value={selected.requested_by} />
-              <LabelValue label="Created" value={dateTime(selected.created_at)} />
-              {selected.resolved_by && <LabelValue label="Resolved By" value={selected.resolved_by} />}
-              {selected.resolved_at && <LabelValue label="Resolved At" value={dateTime(selected.resolved_at)} />}
+              <LabelValue label={t("approvals.riskLevel")} value={<Badge tone={statusTone(selected.risk_level)}>{enumLabel(selected.risk_level, t)}</Badge>} />
+              <LabelValue label={t("common.status")} value={<Badge tone={statusTone(selected.status)}>{enumLabel(selected.status, t)}</Badge>} />
+              <LabelValue label={t("approvals.requestedBy")} value={selected.requested_by} />
+              <LabelValue label={t("col.created")} value={dateTime(selected.created_at)} />
+              {selected.resolved_by && <LabelValue label={t("approvals.resolvedBy")} value={selected.resolved_by} />}
+              {selected.resolved_at && <LabelValue label={t("approvals.resolvedAt")} value={dateTime(selected.resolved_at)} />}
             </div>
 
             {selected.payload && Object.keys(selected.payload).length > 0 && (
               <LabelValue
-                label="Payload"
+                label={t("approvals.payload")}
                 value={
                   <pre className="overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
                     {JSON.stringify(selected.payload, null, 2)}
@@ -162,24 +164,24 @@ export default function Approvals() {
 
             <div>
               <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                <History size={13} /> History
+                <History size={13} /> {t("approvals.history")}
               </div>
               {!history ? (
-                <div className="text-sm text-slate-400">Loading…</div>
+                <div className="text-sm text-slate-400">{t("common.loading")}</div>
               ) : (
                 <div className="space-y-2">
                   {history.map((h) => (
                     <div key={h.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-slate-700">
-                          {titleCase(h.action)} · {h.actor}
+                          {enumLabel(h.action, t)} · {h.actor}
                         </span>
                         <span className="text-xs text-slate-400">{dateTime(h.created_at)}</span>
                       </div>
                       {h.note && <div className="mt-0.5 text-slate-600">{h.note}</div>}
                     </div>
                   ))}
-                  {history.length === 0 && <div className="text-sm text-slate-400">No history entries.</div>}
+                  {history.length === 0 && <div className="text-sm text-slate-400">{t("approvals.noHistory")}</div>}
                 </div>
               )}
             </div>
@@ -188,24 +190,24 @@ export default function Approvals() {
               <div className="border-t border-slate-100 pt-4">
                 <Textarea
                   rows={2}
-                  placeholder="Optional note…"
+                  placeholder={t("approvals.optionalNote")}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   className="mb-3"
                 />
                 <div className="flex gap-2">
                   <Button variant="primary" disabled={busy} onClick={() => resolve("approve")}>
-                    <Check size={16} /> Approve
+                    <Check size={16} /> {t("approvals.approve")}
                   </Button>
                   <Button variant="danger" disabled={busy} onClick={() => resolve("reject")}>
-                    <X size={16} /> Reject
+                    <X size={16} /> {t("approvals.reject")}
                   </Button>
                 </div>
               </div>
             )}
             {selected.status === "pending" && !canResolve && (
               <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                Your role can request approvals but not resolve them.
+                {t("approvals.cannotResolve")}
               </div>
             )}
           </div>

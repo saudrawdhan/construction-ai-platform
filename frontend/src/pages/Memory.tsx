@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Search, Sparkles, Plus, Trash2 } from "lucide-react";
 import { api, ApiError, type Page } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { dateTime, titleCase } from "../lib/format";
+import { dateTime, enumLabel } from "../lib/format";
+import { useT, type Translate } from "../lib/i18n";
 import {
   Badge,
   Button,
@@ -46,13 +47,13 @@ const CATEGORIES = [
   "client_instruction",
 ];
 
-const MEMORY_FIELDS = [
-  { name: "category", label: "Category", type: "select" as const, options: CATEGORIES, initial: "decision" },
-  { name: "summary", label: "Summary", required: true, full: true },
-  { name: "detail", label: "Detail", type: "textarea" as const },
-  { name: "project_id", label: "Project (optional)", type: "project" as const },
-  { name: "source_type", label: "Source type (optional)", type: "text" as const },
-  { name: "confidence", label: "Confidence 0–1 (optional)", type: "number" as const },
+const memoryFields = (t: Translate) => [
+  { name: "category", label: t("mem.category"), type: "select" as const, options: CATEGORIES, initial: "decision" },
+  { name: "summary", label: t("field.summary"), required: true, full: true },
+  { name: "detail", label: t("field.detail"), type: "textarea" as const },
+  { name: "project_id", label: t("field.projectOptional"), type: "project" as const },
+  { name: "source_type", label: t("field.sourceTypeOptional"), type: "text" as const },
+  { name: "confidence", label: t("field.confidenceOptional"), type: "number" as const },
 ];
 
 const categoryTone: Record<string, "red" | "amber" | "blue" | "green" | "slate"> = {
@@ -68,6 +69,7 @@ const categoryTone: Record<string, "red" | "amber" | "blue" | "green" | "slate">
 
 function MemoryCard({ m, score, onDeleted }: { m: Memory; score?: number; onDeleted?: () => void }) {
   const { user } = useAuth();
+  const t = useT();
   const canManage = !!user && user.role !== "viewer";
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -90,14 +92,14 @@ function MemoryCard({ m, score, onDeleted }: { m: Memory; score?: number; onDele
   return (
     <div className="rounded-lg border border-slate-200 p-4">
       <div className="flex items-center justify-between">
-        <Badge tone={categoryTone[m.category] ?? "slate"}>{titleCase(m.category)}</Badge>
+        <Badge tone={categoryTone[m.category] ?? "slate"}>{enumLabel(m.category, t)}</Badge>
         <div className="flex items-center gap-2 text-xs text-slate-400">
-          {score !== undefined && <span className="font-medium text-blue-600">score {score.toFixed(3)}</span>}
-          {m.confidence !== null && <span>conf {m.confidence.toFixed(2)}</span>}
+          {score !== undefined && <span className="font-medium text-blue-600">{t("mem.score", { n: score.toFixed(3) })}</span>}
+          {m.confidence !== null && <span>{t("mem.conf", { n: m.confidence.toFixed(2) })}</span>}
           {canManage && onDeleted && (
             <button
               onClick={() => setConfirming(true)}
-              aria-label="Delete memory"
+              aria-label={t("mem.deleteAria")}
               className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
             >
               <Trash2 size={14} />
@@ -109,23 +111,21 @@ function MemoryCard({ m, score, onDeleted }: { m: Memory; score?: number; onDele
       {m.detail && <p className="mt-1 text-sm text-slate-600">{m.detail}</p>}
       <div className="mt-2 text-xs text-slate-400">
         {m.created_by} · {dateTime(m.created_at)}
-        {m.source_type ? ` · source: ${m.source_type}` : ""}
-        {m.project_id ? ` · project #${m.project_id}` : ""}
+        {m.source_type ? t("mem.source", { src: m.source_type }) : ""}
+        {m.project_id ? t("mem.projectRef", { id: m.project_id }) : ""}
       </div>
 
       {confirming && (
-        <Modal title="Delete Memory" onClose={() => setConfirming(false)}>
+        <Modal title={t("mem.deleteTitle")} onClose={() => setConfirming(false)}>
           <div className="space-y-4">
-            <p className="text-sm text-slate-600">
-              This will permanently delete this memory. This action cannot be undone.
-            </p>
+            <p className="text-sm text-slate-600">{t("mem.confirmDelete")}</p>
             {error && <ErrorBox message={error} />}
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setConfirming(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button variant="danger" disabled={deleting} onClick={confirmDelete}>
-                {deleting ? "Deleting…" : "Delete"}
+                {deleting ? t("rowActions.deleting") : t("common.delete")}
               </Button>
             </div>
           </div>
@@ -139,18 +139,19 @@ type Tab = "browse" | "search" | "extract";
 
 export default function Memory() {
   const { user } = useAuth();
+  const t = useT();
   const canExtract = !!user && user.role !== "viewer";
   const [tab, setTab] = useState<Tab>("browse");
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: "browse", label: "Browse" },
-    { key: "search", label: "Semantic Search" },
-    ...(canExtract ? [{ key: "extract" as Tab, label: "Extract Agent" }] : []),
+    { key: "browse", label: t("mem.tabBrowse") },
+    { key: "search", label: t("mem.tabSearch") },
+    ...(canExtract ? [{ key: "extract" as Tab, label: t("mem.tabExtract") }] : []),
   ];
 
   return (
     <div>
-      <PageHeader title="Enterprise Memory" subtitle="Organizational knowledge with source attribution and hybrid retrieval" />
+      <PageHeader title={t("mem.title")} subtitle={t("mem.subtitle")} />
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
       {tab === "browse" && <Browse />}
       {tab === "search" && <SearchTab />}
@@ -161,6 +162,7 @@ export default function Memory() {
 
 function Browse() {
   const { user } = useAuth();
+  const t = useT();
   const canManage = !!user && user.role !== "viewer";
   const [data, setData] = useState<Page<Memory>>();
   const [error, setError] = useState<string>();
@@ -182,7 +184,7 @@ function Browse() {
   return (
     <>
       <FilterBar>
-        <Field label="Category">
+        <Field label={t("mem.category")}>
           <Select
             value={category}
             onChange={(e) => {
@@ -190,23 +192,23 @@ function Browse() {
               setPage(1);
             }}
           >
-            <option value="">All categories</option>
+            <option value="">{t("mem.allCategories")}</option>
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
-                {titleCase(c)}
+                {enumLabel(c, t)}
               </option>
             ))}
           </Select>
         </Field>
         {canManage && (
           <Button onClick={() => setShowCreate(true)}>
-            <Plus size={16} /> New Memory
+            <Plus size={16} /> {t("mem.new")}
           </Button>
         )}
       </FilterBar>
       {data.items.length === 0 ? (
         <Card>
-          <EmptyState message="No memories recorded yet. Use the Extract Agent to build organizational memory." />
+          <EmptyState message={t("mem.noneYet")} />
         </Card>
       ) : (
         <div className="space-y-3">
@@ -219,10 +221,10 @@ function Browse() {
 
       {showCreate && (
         <CreateModal
-          title="New Memory"
+          title={t("mem.new")}
           endpoint="/memory/create"
-          fields={MEMORY_FIELDS}
-          submitLabel="Save Memory"
+          fields={memoryFields(t)}
+          submitLabel={t("mem.save")}
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
@@ -236,6 +238,7 @@ function Browse() {
 }
 
 function SearchTab() {
+  const t = useT();
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [results, setResults] = useState<{ memory: Memory; score: number }[]>();
@@ -262,26 +265,26 @@ function SearchTab() {
   return (
     <>
       <form onSubmit={run} className="mb-4 flex flex-wrap items-end gap-3">
-        <Field label="Query">
+        <Field label={t("mem.query")}>
           <Input
             className="w-72"
-            placeholder="e.g. supplier delays on steel"
+            placeholder={t("mem.queryPlaceholder")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
         </Field>
-        <Field label="Category">
+        <Field label={t("mem.category")}>
           <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">Any</option>
+            <option value="">{t("mem.any")}</option>
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
-                {titleCase(c)}
+                {enumLabel(c, t)}
               </option>
             ))}
           </Select>
         </Field>
         <Button type="submit" disabled={busy || q.trim().length < 2}>
-          <Search size={15} /> {busy ? "Searching…" : "Search"}
+          <Search size={15} /> {busy ? t("mem.searching") : t("common.search")}
         </Button>
       </form>
 
@@ -300,7 +303,7 @@ function SearchTab() {
           ))}
           {results.length === 0 && (
             <Card>
-              <EmptyState message="No matching memories found." />
+              <EmptyState message={t("mem.noMatch")} />
             </Card>
           )}
         </div>
@@ -310,6 +313,7 @@ function SearchTab() {
 }
 
 function ExtractTab() {
+  const t = useT();
   const [text, setText] = useState("");
   const [store, setStore] = useState(false);
   const [result, setResult] = useState<{
@@ -339,10 +343,10 @@ function ExtractTab() {
     <>
       <Card className="mb-4 p-5">
         <form onSubmit={run} className="space-y-3">
-          <Field label="Source text (meeting notes, site report, correspondence…)">
+          <Field label={t("mem.sourceText")}>
             <Textarea
               rows={5}
-              placeholder="Paste construction text — the agent extracts categorized memories with confidence and source attribution."
+              placeholder={t("mem.sourcePlaceholder")}
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
@@ -355,10 +359,10 @@ function ExtractTab() {
                 onChange={(e) => setStore(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300"
               />
-              Persist extracted memories to the store
+              {t("mem.persist")}
             </label>
             <Button type="submit" disabled={busy || text.trim().length < 10}>
-              <Sparkles size={15} /> {busy ? "Extracting…" : "Extract"}
+              <Sparkles size={15} /> {busy ? t("mem.extracting") : t("mem.extract")}
             </Button>
           </div>
         </form>
@@ -370,16 +374,16 @@ function ExtractTab() {
           <div className="mb-3 flex items-center gap-2 text-sm text-slate-500">
             <ProviderTag provider={result.provider} model={result.model} />
             <span>
-              {result.extracted.length} extracted
-              {result.stored.length > 0 ? ` · ${result.stored.length} persisted` : ""}
+              {t("mem.extractedCount", { n: result.extracted.length })}
+              {result.stored.length > 0 ? t("mem.persistedCount", { n: result.stored.length }) : ""}
             </span>
           </div>
           <div className="space-y-3">
             {result.extracted.map((m, i) => (
               <div key={i} className="rounded-lg border border-slate-200 p-4">
                 <div className="flex items-center justify-between">
-                  <Badge tone={categoryTone[m.category] ?? "slate"}>{titleCase(m.category)}</Badge>
-                  <span className="text-xs text-slate-400">conf {m.confidence_score.toFixed(2)}</span>
+                  <Badge tone={categoryTone[m.category] ?? "slate"}>{enumLabel(m.category, t)}</Badge>
+                  <span className="text-xs text-slate-400">{t("mem.conf", { n: m.confidence_score.toFixed(2) })}</span>
                 </div>
                 <p className="mt-2 text-sm font-medium text-slate-800">{m.summary}</p>
                 {m.detail && <p className="mt-1 text-sm text-slate-600">{m.detail}</p>}
@@ -387,7 +391,7 @@ function ExtractTab() {
             ))}
             {result.extracted.length === 0 && (
               <Card>
-                <EmptyState message="No memories were extracted from this text." />
+                <EmptyState message={t("mem.noneExtracted")} />
               </Card>
             )}
           </div>
