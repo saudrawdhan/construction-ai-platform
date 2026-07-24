@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
 import { api, type Page } from "../lib/api";
 import { dateTime } from "../lib/format";
+import { useT } from "../lib/i18n";
 
 interface Notification {
   id: number;
@@ -17,6 +18,7 @@ interface Notification {
  * scheduled worker's digests/alerts). Polls periodically, shows an unread count, and marks items read.
  */
 export default function NotificationsBell() {
+  const t = useT();
   const [items, setItems] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -69,36 +71,36 @@ export default function NotificationsBell() {
           if (!open) load();
           setOpen((o) => !o);
         }}
-        aria-label="Notifications"
+        aria-label={t("notif.title")}
         className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100"
       >
         <Bell size={17} />
         {unread > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+          <span className="absolute -end-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+        <div className="absolute end-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-            <span className="text-sm font-semibold text-slate-800">Notifications</span>
+            <span className="text-sm font-semibold text-slate-800">{t("notif.title")}</span>
             {unread > 0 && (
               <button onClick={markAllRead} className="text-xs font-medium text-blue-600 hover:underline">
-                Mark all read
+                {t("notif.markAllRead")}
               </button>
             )}
           </div>
           <div className="max-h-96 overflow-y-auto">
             {items.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-slate-400">No notifications yet.</div>
+              <div className="px-4 py-8 text-center text-sm text-slate-400">{t("notif.empty")}</div>
             ) : (
               items.map((n) => (
                 <button
                   key={n.id}
                   onClick={() => markRead(n)}
-                  className={`flex w-full flex-col items-start gap-0.5 border-b border-slate-50 px-4 py-2.5 text-left last:border-0 hover:bg-slate-50 ${
+                  className={`flex w-full flex-col items-start gap-0.5 border-b border-slate-50 px-4 py-2.5 text-start last:border-0 hover:bg-slate-50 ${
                     n.is_read ? "" : "bg-blue-50/40"
                   }`}
                 >

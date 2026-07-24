@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
+import { useT } from "../lib/i18n";
+import { enumLabel } from "../lib/format";
 import { Button, ErrorBox, Field, Input, Modal, Select, Textarea } from "./ui";
 import ProjectPicker from "./ProjectPicker";
 
@@ -30,7 +32,7 @@ export default function CreateModal({
   title,
   endpoint,
   fields,
-  submitLabel = "Create",
+  submitLabel,
   editId,
   initial,
   onCreated,
@@ -45,6 +47,7 @@ export default function CreateModal({
   onCreated: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const isEdit = editId !== undefined;
   const activeFields = isEdit ? fields.filter((f) => f.type !== "project") : fields;
   const [form, setForm] = useState<Record<string, string>>(() =>
@@ -103,7 +106,7 @@ export default function CreateModal({
                   required={f.required}
                   value={form[f.name]}
                   onChange={(v) => set(f.name, v)}
-                  placeholder="Select a project…"
+                  placeholder={t("form.selectProject")}
                   projects={projects}
                 />
               ) : f.type === "select" ? (
@@ -111,10 +114,14 @@ export default function CreateModal({
                   {/* When editing, the record's current value may not be one of the curated
                       options (e.g. a seeded status) — surface it so the dropdown isn't blank. */}
                   {form[f.name] && !(f.options ?? []).includes(form[f.name]) && (
-                    <option key={form[f.name]}>{form[f.name]}</option>
+                    <option key={form[f.name]} value={form[f.name]}>
+                      {enumLabel(form[f.name], t)}
+                    </option>
                   )}
                   {(f.options ?? []).map((o) => (
-                    <option key={o}>{o}</option>
+                    <option key={o} value={o}>
+                      {enumLabel(o, t)}
+                    </option>
                   ))}
                 </Select>
               ) : f.type === "textarea" ? (
@@ -139,10 +146,10 @@ export default function CreateModal({
           {error && <ErrorBox message={error} />}
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={onClose}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "Saving…" : submitLabel}
+              {saving ? t("common.saving") : (submitLabel ?? t("common.create"))}
             </Button>
           </div>
         </div>

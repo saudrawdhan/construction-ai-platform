@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { type LucideIcon } from "lucide-react";
+import { useT } from "../lib/i18n";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
@@ -97,7 +98,7 @@ export function ErrorBox({ message }: { message: string }) {
 export function Table({ head, children }: { head: string[]; children: ReactNode }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-start text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
             {head.map((h) => (
@@ -211,18 +212,17 @@ export function Pagination({
   total: number;
   onPage: (page: number) => void;
 }) {
+  const t = useT();
   if (pages <= 1) return null;
   return (
     <div className="flex items-center justify-between px-4 py-3 text-sm text-slate-500">
-      <span>
-        Page {page} of {pages} · {total.toLocaleString()} total
-      </span>
+      <span>{t("pagination.summary", { page, pages, total: total.toLocaleString() })}</span>
       <div className="flex gap-2">
         <Button variant="secondary" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-          Previous
+          {t("pagination.previous")}
         </Button>
         <Button variant="secondary" disabled={page >= pages} onClick={() => onPage(page + 1)}>
-          Next
+          {t("pagination.next")}
         </Button>
       </div>
     </div>
@@ -242,6 +242,7 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const closeT = useT();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -264,7 +265,7 @@ export function Modal({
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700" aria-label="Close">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700" aria-label={closeT("common.close")}>
             ✕
           </button>
         </div>

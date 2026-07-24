@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { api, ApiError } from "../lib/api";
+import { useT } from "../lib/i18n";
 import { Button, ErrorBox, Modal } from "./ui";
 import CreateModal, { type FormField } from "./CreateModal";
 
@@ -27,6 +28,7 @@ export default function RowActions<T extends { id: number }>({
   canManage: boolean;
   onChanged: () => void;
 }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -55,7 +57,7 @@ export default function RowActions<T extends { id: number }>({
       const err = e as ApiError;
       setError(
         err.status === 409
-          ? `This ${entityLabel.toLowerCase()} still has related records and cannot be deleted.`
+          ? t("rowActions.hasRelated", { entity: entityLabel.toLowerCase() })
           : err.message
       );
     } finally {
@@ -65,7 +67,12 @@ export default function RowActions<T extends { id: number }>({
 
   return (
     <div className="flex gap-1.5">
-      <Button variant="ghost" className="px-2" onClick={() => setEditing(true)} aria-label="Edit">
+      <Button
+        variant="ghost"
+        className="px-2"
+        onClick={() => setEditing(true)}
+        aria-label={t("common.edit")}
+      >
         <Pencil size={15} />
       </Button>
       <Button
@@ -75,19 +82,19 @@ export default function RowActions<T extends { id: number }>({
           setError(undefined);
           setConfirming(true);
         }}
-        aria-label="Delete"
+        aria-label={t("common.delete")}
       >
         <Trash2 size={15} />
       </Button>
 
       {editing && (
         <CreateModal
-          title={`Edit ${entityLabel}`}
+          title={t("rowActions.editTitle", { entity: entityLabel })}
           endpoint={endpoint}
           editId={record.id}
           initial={initial}
           fields={fields}
-          submitLabel="Save Changes"
+          submitLabel={t("common.saveChanges")}
           onClose={() => setEditing(false)}
           onCreated={() => {
             setEditing(false);
@@ -97,19 +104,21 @@ export default function RowActions<T extends { id: number }>({
       )}
 
       {confirming && (
-        <Modal title={`Delete ${entityLabel}`} onClose={() => setConfirming(false)}>
+        <Modal
+          title={t("rowActions.deleteTitle", { entity: entityLabel })}
+          onClose={() => setConfirming(false)}
+        >
           <div className="space-y-4">
             <p className="text-sm text-slate-600">
-              This will permanently delete this {entityLabel.toLowerCase()}. This action cannot be
-              undone.
+              {t("rowActions.confirmDelete", { entity: entityLabel.toLowerCase() })}
             </p>
             {error && <ErrorBox message={error} />}
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setConfirming(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button variant="danger" disabled={deleting} onClick={confirmDelete}>
-                {deleting ? "Deleting…" : "Delete"}
+                {deleting ? t("rowActions.deleting") : t("common.delete")}
               </Button>
             </div>
           </div>

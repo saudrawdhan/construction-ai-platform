@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ShieldCheck, Check } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useT } from "../lib/i18n";
 import { Button } from "./ui";
 
 /**
@@ -15,7 +16,7 @@ export default function RequestApprovalButton({
   projectId,
   payload,
   riskLevel = "high",
-  label = "Request Approval",
+  label,
 }: {
   actionType: string;
   projectId?: number | null;
@@ -23,6 +24,7 @@ export default function RequestApprovalButton({
   riskLevel?: string;
   label?: string;
 }) {
+  const t = useT();
   const { user } = useAuth();
   const canRequest = !!user && user.role !== "viewer";
   const [state, setState] = useState<"idle" | "busy" | "done">("idle");
@@ -50,7 +52,7 @@ export default function RequestApprovalButton({
   if (state === "done") {
     return (
       <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
-        <Check size={15} /> Sent for approval
+        <Check size={15} /> {t("approval.sent")}
       </span>
     );
   }
@@ -58,7 +60,8 @@ export default function RequestApprovalButton({
   return (
     <div className="flex items-center gap-2">
       <Button variant="secondary" onClick={submit} disabled={state === "busy"}>
-        <ShieldCheck size={15} /> {state === "busy" ? "Requesting…" : label}
+        <ShieldCheck size={15} />{" "}
+        {state === "busy" ? t("approval.requesting") : (label ?? t("approval.request"))}
       </Button>
       {error && <span className="text-xs text-red-600">{error}</span>}
     </div>

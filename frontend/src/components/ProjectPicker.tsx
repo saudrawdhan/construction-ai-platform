@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { useT } from "../lib/i18n";
 
 export interface ProjectOption {
   id: number;
@@ -15,7 +16,7 @@ export default function ProjectPicker({
   projects,
   value,
   onChange,
-  placeholder = "All projects",
+  placeholder: placeholderProp,
   required = false,
 }: {
   projects: ProjectOption[];
@@ -24,6 +25,8 @@ export default function ProjectPicker({
   placeholder?: string;
   required?: boolean;
 }) {
+  const t = useT();
+  const placeholder = placeholderProp ?? t("projectPicker.all");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
@@ -118,7 +121,7 @@ export default function ProjectPicker({
           aria-controls="project-picker-list"
           aria-activedescendant={open ? `project-picker-row-${highlight}` : undefined}
           required={required && !value}
-          className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm text-slate-800 shadow-sm outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          className="w-full rounded-lg border border-slate-200 bg-white py-2 ps-3 pe-8 text-sm text-slate-800 shadow-sm outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           placeholder={placeholder}
           value={query}
           onFocus={() => setOpen(true)}
@@ -143,7 +146,7 @@ export default function ProjectPicker({
         />
         <ChevronDown
           size={15}
-          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+          className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 text-slate-400"
         />
       </div>
       {open && (
@@ -161,7 +164,7 @@ export default function ProjectPicker({
               aria-selected={row.id === value}
               onClick={() => choose(row.id)}
               onMouseEnter={() => setHighlight(i)}
-              className={`block w-full truncate px-3 py-1.5 text-left text-sm ${
+              className={`block w-full truncate px-3 py-1.5 text-start text-sm ${
                 i === highlight ? "bg-blue-50" : ""
               } ${
                 row.id === value
@@ -175,7 +178,7 @@ export default function ProjectPicker({
             </button>
           ))}
           {filtered.length === 0 && (
-            <div className="px-3 py-1.5 text-sm text-slate-400">No matching projects.</div>
+            <div className="px-3 py-1.5 text-sm text-slate-400">{t("projectPicker.noMatch")}</div>
           )}
         </div>
       )}

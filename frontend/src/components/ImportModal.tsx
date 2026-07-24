@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { api, ApiError } from "../lib/api";
+import { useT } from "../lib/i18n";
 import { Badge, Button, ErrorBox, Field, Modal } from "./ui";
 
 interface ImportReport {
@@ -27,6 +28,7 @@ export default function ImportModal({
   onImported: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [file, setFile] = useState<File | null>(null);
   const [dryRun, setDryRun] = useState(true);
   const [report, setReport] = useState<ImportReport>();
@@ -67,19 +69,18 @@ export default function ImportModal({
     <Modal title={title} onClose={onClose}>
       <div className="space-y-4">
         <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-          Upload a <span className="font-medium">.csv</span> or{" "}
-          <span className="font-medium">.xlsx</span> file whose columns match the template.{" "}
+          {t("import.instructions")}{" "}
           <button
             type="button"
             onClick={getTemplate}
             className="inline-flex items-center gap-1 font-medium text-blue-600 hover:underline"
           >
-            <Download size={14} /> Download template
+            <Download size={14} /> {t("import.downloadTemplate")}
           </button>
         </div>
 
         <form onSubmit={submit} className="space-y-3">
-          <Field label="File">
+          <Field label={t("import.file")}>
             <input
               ref={fileRef}
               type="file"
@@ -88,7 +89,7 @@ export default function ImportModal({
                 setFile(e.target.files?.[0] ?? null);
                 setReport(undefined);
               }}
-              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+              className="block w-full text-sm text-slate-600 file:me-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
             />
           </Field>
           <label className="flex items-center gap-2 text-sm text-slate-600">
@@ -98,14 +99,15 @@ export default function ImportModal({
               onChange={(e) => setDryRun(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300"
             />
-            Validate first without saving (recommended)
+            {t("import.validateFirst")}
           </label>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={onClose}>
-              Close
+              {t("common.close")}
             </Button>
             <Button type="submit" disabled={busy || !file}>
-              <Upload size={16} /> {busy ? "Processing…" : dryRun ? "Validate" : "Import"}
+              <Upload size={16} />{" "}
+              {busy ? t("import.processing") : dryRun ? t("import.validate") : t("common.import")}
             </Button>
           </div>
         </form>
@@ -115,27 +117,31 @@ export default function ImportModal({
         {report && (
           <div className="rounded-lg border border-slate-200 p-4">
             <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-              <Badge tone="slate">{report.total_rows} rows</Badge>
-              <Badge tone="green">{report.valid_rows} valid</Badge>
-              {report.invalid_rows > 0 && <Badge tone="red">{report.invalid_rows} invalid</Badge>}
+              <Badge tone="slate">{t("import.rows", { n: report.total_rows })}</Badge>
+              <Badge tone="green">{t("import.valid", { n: report.valid_rows })}</Badge>
+              {report.invalid_rows > 0 && (
+                <Badge tone="red">{t("import.invalid", { n: report.invalid_rows })}</Badge>
+              )}
               {report.dry_run ? (
-                <span className="text-slate-500">Preview only — nothing saved.</span>
+                <span className="text-slate-500">{t("import.previewOnly")}</span>
               ) : (
-                <span className="font-medium text-emerald-700">{report.created} imported.</span>
+                <span className="font-medium text-emerald-700">
+                  {t("import.importedCount", { n: report.created })}
+                </span>
               )}
             </div>
             {report.dry_run && report.valid_rows > 0 && report.invalid_rows === 0 && (
-              <p className="text-sm text-slate-600">
-                All rows are valid. Uncheck “Validate first” and import to save them.
-              </p>
+              <p className="text-sm text-slate-600">{t("import.allValid")}</p>
             )}
             {report.errors.length > 0 && (
               <div className="mt-2">
-                <div className="mb-1 text-xs font-medium text-slate-500">Rows with problems</div>
+                <div className="mb-1 text-xs font-medium text-slate-500">
+                  {t("import.rowsWithProblems")}
+                </div>
                 <div className="max-h-48 space-y-1 overflow-y-auto">
                   {report.errors.map((e, i) => (
                     <div key={i} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700">
-                      Row {e.row}: {e.errors.join("; ")}
+                      {t("import.rowError", { row: e.row, errors: e.errors.join("; ") })}
                     </div>
                   ))}
                 </div>
