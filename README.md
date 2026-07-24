@@ -122,7 +122,7 @@ can adopt it and run its own operation:
 | Layer | Technology |
 |---|---|
 | Backend API | FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), Alembic |
-| Database | PostgreSQL 16 + pgvector (39 tables) |
+| Database | PostgreSQL 16 + pgvector (41 tables) |
 | Cache / scheduler | Redis 7 + arq worker |
 | LLM | Provider-agnostic client; Google Gemini (`gemini-2.5-flash`) by default, deterministic mock adapter for tests and offline dev |
 | Embeddings / RAG | `intfloat/multilingual-e5-large` (1024-dim, ONNX via fastembed — no PyTorch) + hybrid pgvector-cosine and Postgres full-text search fused with Reciprocal Rank Fusion |

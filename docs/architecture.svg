@@ -56,7 +56,7 @@
   <!-- Data layer -->
   <rect x="150" y="436" width="380" height="66" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
   <text x="340" y="462" text-anchor="middle" font-size="13.5" font-weight="600" fill="#166534">PostgreSQL 16 + pgvector</text>
-  <text x="340" y="482" text-anchor="middle" font-size="11.5" fill="#15803d">39 tables · relational data + vectors · HNSW + GIN indexes</text>
+  <text x="340" y="482" text-anchor="middle" font-size="11.5" fill="#15803d">41 tables · relational data + vectors · HNSW + GIN indexes</text>
 
   <rect x="560" y="436" width="250" height="66" rx="10" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
   <text x="685" y="462" text-anchor="middle" font-size="13.5" font-weight="600" fill="#9a3412">Redis 7</text>
