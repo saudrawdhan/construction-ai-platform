@@ -1,3 +1,5 @@
+import { translate } from "./i18n";
+
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api/v1";
 
 export interface Page<T> {
@@ -45,9 +47,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
   if (res.status === 401) {
     notifySessionEnded();
-    throw new ApiError(401, "Session expired. Please sign in again.");
+    throw new ApiError(401, translate("session.expired"));
   }
-  if (!res.ok) throw new ApiError(res.status, await readError(res, "Request failed"));
+  if (!res.ok) throw new ApiError(res.status, await readError(res, translate("common.requestFailed")));
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
@@ -70,7 +72,7 @@ export const api = {
       credentials: "include",
       body: form.toString(),
     });
-    if (!res.ok) throw new ApiError(res.status, "Incorrect email or password");
+    if (!res.ok) throw new ApiError(res.status, translate("api.badCredentials"));
     return res.json();
   },
   logout: () => request<void>("POST", "/auth/logout"),
@@ -83,9 +85,9 @@ export const api = {
     const res = await fetch(`${BASE}${path}`, { credentials: "include" });
     if (res.status === 401) {
       notifySessionEnded();
-      throw new ApiError(401, "Session expired. Please sign in again.");
+      throw new ApiError(401, translate("session.expired"));
     }
-    if (!res.ok) throw new ApiError(res.status, await readError(res, "Download failed"));
+    if (!res.ok) throw new ApiError(res.status, await readError(res, translate("api.downloadFailed")));
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -100,9 +102,9 @@ export const api = {
     const res = await fetch(`${BASE}${path}`, { method: "POST", credentials: "include", body: form });
     if (res.status === 401) {
       notifySessionEnded();
-      throw new ApiError(401, "Session expired. Please sign in again.");
+      throw new ApiError(401, translate("session.expired"));
     }
-    if (!res.ok) throw new ApiError(res.status, await readError(res, "Upload failed"));
+    if (!res.ok) throw new ApiError(res.status, await readError(res, translate("api.uploadFailed")));
     return (await res.json()) as T;
   },
 };

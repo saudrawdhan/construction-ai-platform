@@ -1,3 +1,5 @@
+import type { Translate } from "./i18n";
+
 export function money(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   return `SAR ${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -23,16 +25,28 @@ export function titleCase(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Administrator",
-  executive: "Executive",
-  project_manager: "Project Manager",
-  site_engineer: "Site Engineer",
-  procurement_officer: "Procurement Officer",
-  qa_qc: "QA / QC",
-  viewer: "Viewer",
-};
+// Maps a role code to its localized label, falling back to a title-cased version
+// of the raw code when a translation is not defined.
+export function roleLabel(role: string, t: Translate): string {
+  const key = `role.${role}`;
+  const label = t(key);
+  return label === key ? titleCase(role) : label;
+}
 
-export function roleLabel(role: string): string {
-  return ROLE_LABELS[role] ?? titleCase(role);
+// Maps a stored English enum value (status, type, risk level…) to its localized
+// display label. The original value is unchanged and is what still gets sent to
+// the API — only the on-screen text is translated. Unknown values are title-cased.
+export function enumLabel(value: string | null | undefined, t: Translate): string {
+  if (!value) return "—";
+  const key = `enum.${value.toLowerCase().trim().replace(/[\s/]+/g, "_")}`;
+  const label = t(key);
+  return label === key ? titleCase(value) : label;
+}
+
+// Maps an AI workflow code (e.g. "pr_review") to its localized label, falling
+// back to a title-cased version of the code when no translation is defined.
+export function workflowLabel(value: string, t: Translate): string {
+  const key = `workflow.${value.toLowerCase()}`;
+  const label = t(key);
+  return label === key ? titleCase(value) : label;
 }
