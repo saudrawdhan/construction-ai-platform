@@ -191,6 +191,7 @@ included in this repository. With a dataset present under `data/`, the loader sc
 ```bash
 docker compose run --rm api python -m scripts.import_dataset       # ETL from the source dump
 docker compose run --rm api python -m scripts.seed_supplemental    # RFIs + planned activities
+docker compose run --rm api python -m scripts.seed_registers       # risks, issues, milestones, actions
 docker compose run --rm api python -m scripts.seed_users           # the seven role accounts
 docker compose run --rm api python -m scripts.ingest_documents     # embed the document corpus
 ```

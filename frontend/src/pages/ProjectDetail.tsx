@@ -50,7 +50,15 @@ interface Risk {
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
 const LIKELIHOODS = ["Low", "Medium", "High"];
 
-type WorkspaceTab = "risks" | "rfis" | "orders" | "meetings" | "reports";
+type WorkspaceTab =
+  | "risks"
+  | "issues"
+  | "decisions"
+  | "milestones"
+  | "rfis"
+  | "orders"
+  | "meetings"
+  | "reports";
 
 /** Fetches a project-scoped list once and renders it, so a project's own RFIs, orders, meetings and
  * site reports live on its detail page (the project workspace) using the existing filtered endpoints. */
@@ -72,6 +80,41 @@ function RelatedList<T extends { id: number }>({
     api
       .get<Page<T>>(endpoint)
       .then((p) => setItems(p.items))
+      .catch((e: ApiError) => setError(e.message));
+  }, [endpoint]);
+
+  if (error) return <div className="text-sm text-red-600">{error}</div>;
+  if (!items) return <Spinner />;
+
+  return (
+    <Card>
+      <Table head={head}>{items.map(renderRow)}</Table>
+      {items.length === 0 && <EmptyState message={empty} />}
+    </Card>
+  );
+}
+
+/** The project registers return a plain array rather than a page, since a single project's
+ * decisions, issues and milestones are bounded — kept separate from RelatedList so neither has to
+ * branch on the response shape. */
+function RegisterList<T extends { id: number }>({
+  endpoint,
+  head,
+  renderRow,
+  empty,
+}: {
+  endpoint: string;
+  head: string[];
+  renderRow: (item: T) => React.ReactNode;
+  empty: string;
+}) {
+  const [items, setItems] = useState<T[]>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    api
+      .get<T[]>(endpoint)
+      .then(setItems)
       .catch((e: ApiError) => setError(e.message));
   }, [endpoint]);
 
@@ -167,6 +210,9 @@ export default function ProjectDetail() {
       <Tabs
         tabs={[
           { key: "risks", label: t("pd.riskRegister") },
+          { key: "issues", label: t("pd.issues") },
+          { key: "decisions", label: t("pd.decisions") },
+          { key: "milestones", label: t("pd.milestones") },
           { key: "rfis", label: t("nav.rfis") },
           { key: "orders", label: t("pd.purchaseOrders") },
           { key: "meetings", label: t("nav.meetings") },
@@ -175,6 +221,53 @@ export default function ProjectDetail() {
         active={wtab}
         onChange={setWtab}
       />
+
+      {wtab === "issues" && (
+        <RegisterList<{ id: number; title: string; description: string | null; status: string; owner: string | null }>
+          endpoint={`/projects/${id}/issues`}
+          head={[t("col.title"), t("field.description"), t("common.status"), t("field.owner")]}
+          empty={t("pd.noIssues")}
+          renderRow={(i) => (
+            <tr key={i.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-medium text-slate-800">{i.title}</td>
+              <td className="px-4 py-3 text-slate-600">{i.description ?? "—"}</td>
+              <td className="px-4 py-3"><Badge tone={statusTone(i.status)}>{enumLabel(i.status, t)}</Badge></td>
+              <td className="px-4 py-3 text-slate-600">{i.owner ?? "—"}</td>
+            </tr>
+          )}
+        />
+      )}
+
+      {wtab === "decisions" && (
+        <RegisterList<{ id: number; decision_date: string | null; decision_text: string; owner: string; meeting_id: number }>
+          endpoint={`/projects/${id}/decisions`}
+          head={[t("col.date"), t("pd.decision"), t("field.owner")]}
+          empty={t("pd.noDecisions")}
+          renderRow={(d) => (
+            <tr key={d.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3 text-slate-600">{date(d.decision_date)}</td>
+              <td className="px-4 py-3 text-slate-800">{d.decision_text}</td>
+              <td className="px-4 py-3 text-slate-600">{d.owner}</td>
+            </tr>
+          )}
+        />
+      )}
+
+      {wtab === "milestones" && (
+        <RegisterList<{ id: number; name: string; planned_date: string | null; actual_date: string | null; status: string }>
+          endpoint={`/projects/${id}/milestones`}
+          head={[t("col.title"), t("pd.plannedDate"), t("pd.actualDate"), t("common.status")]}
+          empty={t("pd.noMilestones")}
+          renderRow={(m) => (
+            <tr key={m.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-medium text-slate-800">{m.name}</td>
+              <td className="px-4 py-3 text-slate-600">{date(m.planned_date)}</td>
+              <td className="px-4 py-3 text-slate-600">{date(m.actual_date)}</td>
+              <td className="px-4 py-3"><Badge tone={statusTone(m.status)}>{enumLabel(m.status, t)}</Badge></td>
+            </tr>
+          )}
+        />
+      )}
 
       {wtab === "rfis" && (
         <RelatedList<{ id: number; rfi_number: string; subject: string; status: string; priority: string }>

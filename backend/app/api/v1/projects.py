@@ -19,6 +19,11 @@ from app.schemas.common import Page
 from app.schemas.imports import ImportReport
 from app.schemas.project import (
     ProjectCreate,
+    ProjectDecisionRead,
+    ProjectIssueCreate,
+    ProjectIssueRead,
+    ProjectMilestoneCreate,
+    ProjectMilestoneRead,
     ProjectRead,
     ProjectRiskCreate,
     ProjectRiskRead,
@@ -138,3 +143,65 @@ async def create_project_risk(
     await db.commit()
     await db.refresh(risk)
     return ProjectRiskRead.model_validate(risk)
+
+
+async def _require_project(db: DbSession, project_id: int) -> None:
+    if await project_service.get_project(db, project_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+
+@router.get("/{project_id}/issues", response_model=list[ProjectIssueRead])
+async def list_project_issues(
+    project_id: int, db: DbSession, _: CurrentUser
+) -> list[ProjectIssueRead]:
+    await _require_project(db, project_id)
+    issues = await project_service.list_issues(db, project_id)
+    return [ProjectIssueRead.model_validate(i) for i in issues]
+
+
+@router.post(
+    "/{project_id}/issues",
+    response_model=ProjectIssueRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_issue(
+    project_id: int, payload: ProjectIssueCreate, db: DbSession, _: ProjectManagers
+) -> ProjectIssueRead:
+    await _require_project(db, project_id)
+    issue = await project_service.create_issue(db, project_id, payload)
+    await db.commit()
+    await db.refresh(issue)
+    return ProjectIssueRead.model_validate(issue)
+
+
+@router.get("/{project_id}/milestones", response_model=list[ProjectMilestoneRead])
+async def list_project_milestones(
+    project_id: int, db: DbSession, _: CurrentUser
+) -> list[ProjectMilestoneRead]:
+    await _require_project(db, project_id)
+    milestones = await project_service.list_milestones(db, project_id)
+    return [ProjectMilestoneRead.model_validate(m) for m in milestones]
+
+
+@router.post(
+    "/{project_id}/milestones",
+    response_model=ProjectMilestoneRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_milestone(
+    project_id: int, payload: ProjectMilestoneCreate, db: DbSession, _: ProjectManagers
+) -> ProjectMilestoneRead:
+    await _require_project(db, project_id)
+    milestone = await project_service.create_milestone(db, project_id, payload)
+    await db.commit()
+    await db.refresh(milestone)
+    return ProjectMilestoneRead.model_validate(milestone)
+
+
+@router.get("/{project_id}/decisions", response_model=list[ProjectDecisionRead])
+async def list_project_decisions(
+    project_id: int, db: DbSession, _: CurrentUser
+) -> list[ProjectDecisionRead]:
+    await _require_project(db, project_id)
+    decisions = await project_service.list_decisions(db, project_id)
+    return [ProjectDecisionRead.model_validate(d) for d in decisions]

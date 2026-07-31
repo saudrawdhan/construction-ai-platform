@@ -1,8 +1,21 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Client, Project, ProjectRisk
-from app.schemas.project import ProjectCreate, ProjectRiskCreate, ProjectUpdate
+from app.models import (
+    Client,
+    Project,
+    ProjectDecision,
+    ProjectIssue,
+    ProjectMilestone,
+    ProjectRisk,
+)
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectIssueCreate,
+    ProjectMilestoneCreate,
+    ProjectRiskCreate,
+    ProjectUpdate,
+)
 
 
 async def list_projects(
@@ -91,3 +104,61 @@ async def create_risk(
     db.add(risk)
     await db.flush()
     return risk
+
+
+async def list_issues(db: AsyncSession, project_id: int) -> list[ProjectIssue]:
+    rows = await db.scalars(
+        select(ProjectIssue)
+        .where(ProjectIssue.project_id == project_id)
+        .order_by(ProjectIssue.id)
+    )
+    return list(rows)
+
+
+async def create_issue(
+    db: AsyncSession, project_id: int, data: ProjectIssueCreate
+) -> ProjectIssue:
+    issue = ProjectIssue(project_id=project_id, **data.model_dump())
+    db.add(issue)
+    await db.flush()
+    return issue
+
+
+async def list_milestones(db: AsyncSession, project_id: int) -> list[ProjectMilestone]:
+    # Ordered by the date the milestone is aimed at rather than insertion order, since a
+    # programme is read chronologically; undated entries sort last instead of leading.
+    rows = await db.scalars(
+        select(ProjectMilestone)
+        .where(ProjectMilestone.project_id == project_id)
+        .order_by(
+            ProjectMilestone.planned_date.is_(None),
+            ProjectMilestone.planned_date,
+            ProjectMilestone.id,
+        )
+    )
+    return list(rows)
+
+
+async def create_milestone(
+    db: AsyncSession, project_id: int, data: ProjectMilestoneCreate
+) -> ProjectMilestone:
+    milestone = ProjectMilestone(project_id=project_id, **data.model_dump())
+    db.add(milestone)
+    await db.flush()
+    return milestone
+
+
+async def list_decisions(db: AsyncSession, project_id: int) -> list[ProjectDecision]:
+    """Every decision recorded across the project's meetings, newest first — the meetings API
+    exposes these only one meeting at a time, which leaves no way to read a project's decision
+    history as a whole."""
+    rows = await db.scalars(
+        select(ProjectDecision)
+        .where(ProjectDecision.project_id == project_id)
+        .order_by(
+            ProjectDecision.decision_date.is_(None),
+            ProjectDecision.decision_date.desc(),
+            ProjectDecision.id.desc(),
+        )
+    )
+    return list(rows)

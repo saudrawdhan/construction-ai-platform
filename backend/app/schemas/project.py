@@ -61,3 +61,54 @@ class ProjectRiskRead(BaseModel):
     status: str
     owner: str | None = None
     created_at: datetime
+
+
+class ProjectIssueCreate(BaseModel):
+    title: str
+    description: str | None = None
+    owner: str | None = None
+
+
+class ProjectIssueRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int
+    title: str
+    description: str | None = None
+    status: str
+    owner: str | None = None
+    created_at: datetime
+
+
+class ProjectMilestoneCreate(BaseModel):
+    name: str
+    planned_date: date | None = None
+    actual_date: date | None = None
+
+
+class ProjectMilestoneRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int
+    name: str
+    planned_date: date | None = None
+    actual_date: date | None = None
+    status: str
+    created_at: datetime
+
+
+class ProjectDecisionRead(BaseModel):
+    """Read-only at project level: decisions are recorded by the meeting-summary workflow, so
+    there is no direct create path — inventing one here would let a decision exist with no
+    meeting that reached it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int
+    meeting_id: int
+    decision_date: date | None = None
+    decision_text: str
+    owner: str
