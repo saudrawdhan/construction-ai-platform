@@ -76,6 +76,8 @@ _SELF_NARRATING_LABELS = {
     "get_claims": "claims",
     "get_change_orders": "change orders",
     "get_safety_events": "safety events",
+    "get_project_risks": "project risks",
+    "get_open_action_items": "open action items",
 }
 _SELF_NARRATING_TOOLS = frozenset(_SELF_NARRATING_LABELS)
 
@@ -635,6 +637,22 @@ def _analysis_route(goal: str, project_id: int | None) -> tuple[str, dict, str] 
             "escalate_overdue_rfis", {"project_id": project_id},
             "Check overdue RFIs for this project.",
         )
+    # Deliberately ordered ahead of the meeting-summary branch below, which also matches on
+    # "action item": asking what is still outstanding is a lookup against the register, not a
+    # request to summarize notes. The open/outstanding qualifier keeps the split narrow, so
+    # "summarize the meeting minutes" still routes to meeting_summarize as before.
+    if project_id is not None and (
+        "action item" in low or "action-item" in low
+        or "بنود الإجراء" in low or "بند إجراء" in low or "المهام" in low
+    ) and (
+        "open" in low or "outstanding" in low or "unresolved" in low or "overdue" in low
+        or "pending" in low or "still" in low
+        or "مفتوح" in low or "متأخر" in low or "معلق" in low or "عالق" in low
+    ):
+        return (
+            "get_open_action_items", {"project_id": project_id},
+            "Look up the unresolved action items for this project.",
+        )
     if project_id is not None and ("meeting" in low or "اجتماع" in low) and (
         "summar" in low or "minutes" in low or "action item" in low
         or "ملخص" in low or "محضر" in low
@@ -671,6 +689,16 @@ def _analysis_route(goal: str, project_id: int | None) -> tuple[str, dict, str] 
         return (
             "get_safety_events", {"project_id": project_id},
             "Look up the safety events on record for this project.",
+        )
+    # Last of the entity lookups so the more specific branches above win first. Supplier wording
+    # is excluded explicitly: "supplier risk" without an id reaches this point, and answering it
+    # from the project's own risk register would silently answer a different question.
+    if project_id is not None and "supplier" not in low and "مورد" not in low and (
+        "risk" in low or "مخاطر" in low or "خطر" in low
+    ):
+        return (
+            "get_project_risks", {"project_id": project_id},
+            "Look up the risks on this project's risk register.",
         )
     return None
 

@@ -29,7 +29,14 @@ from app.agents.workflows import (
     site_report,
     supplier_risk,
 )
-from app.models import ChangeOrder, Claim, Project, SafetyEvent
+from app.models import (
+    ChangeOrder,
+    Claim,
+    MeetingActionItem,
+    Project,
+    ProjectRisk,
+    SafetyEvent,
+)
 from app.schemas.memory import MemoryCategory, MemoryCreate
 from app.schemas.workflows import (
     ExecutiveReportRequest,
@@ -421,6 +428,119 @@ async def _get_safety_events(ctx: ToolContext, project_id: int) -> ToolResult:
     )
 
 
+# Both registers store status as free text with an "Open" default rather than an enum, so a
+# closed record is recognized by value rather than assumed — anything outside this set counts as
+# still open, which fails safe: an unfamiliar status is surfaced for attention, never hidden.
+_CLOSED_STATUSES = frozenset(
+    {"closed", "done", "completed", "resolved", "cancelled", "canceled"}
+)
+
+_SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def _severity_rank(severity: str | None) -> int:
+    return _SEVERITY_ORDER.get((severity or "").lower(), len(_SEVERITY_ORDER))
+
+
+async def _get_project_risks(ctx: ToolContext, project_id: int) -> ToolResult:
+    rows = list(
+        await ctx.db.scalars(select(ProjectRisk).where(ProjectRisk.project_id == project_id))
+    )
+    if not rows:
+        return ToolResult(summary=f"No risks on record for project {project_id}.")
+    open_rows = [r for r in rows if (r.status or "").lower() not in _CLOSED_STATUSES]
+    sources = [{"type": "project_risk", "id": r.id, "label": r.title[:80]} for r in rows]
+    if not open_rows:
+        return ToolResult(
+            summary=f"Project {project_id} has {len(rows)} risk(s) on record, all closed.",
+            data={"count": len(rows), "open_count": 0},
+            sources=sources,
+        )
+    ranked = sorted(open_rows, key=lambda r: (_severity_rank(r.severity), r.id))
+    by_severity: dict[str, int] = {}
+    for risk in ranked:
+        by_severity[risk.severity] = by_severity.get(risk.severity, 0) + 1
+    severity_line = ", ".join(f"{count} {sev}" for sev, count in by_severity.items())
+    # Title and description are free text a user types into the risk register, so they reach the
+    # planner through the same shield every other retrieved content path uses.
+    lines = [
+        _shield(
+            f"- [{risk.severity} severity, likelihood {risk.likelihood or 'unspecified'}, "
+            f"status {risk.status}, owner {risk.owner or 'unassigned'}]",
+            f"{risk.title}. {risk.description}" if risk.description else risk.title,
+        )
+        for risk in ranked[:10]
+    ]
+    summary = (
+        f"Project {project_id} has {len(rows)} risk(s) on record, {len(open_rows)} still open "
+        f"({severity_line}).\n" + "\n".join(lines)
+    )
+    return ToolResult(
+        summary=summary,
+        data={"count": len(rows), "open_count": len(open_rows)},
+        sources=sources,
+    )
+
+
+async def _get_open_action_items(ctx: ToolContext, project_id: int) -> ToolResult:
+    rows = list(
+        await ctx.db.scalars(
+            select(MeetingActionItem)
+            .where(MeetingActionItem.project_id == project_id)
+            .order_by(
+                MeetingActionItem.due_date.is_(None),
+                MeetingActionItem.due_date,
+                MeetingActionItem.id,
+            )
+        )
+    )
+    if not rows:
+        return ToolResult(summary=f"No meeting action items on record for project {project_id}.")
+    open_rows = [i for i in rows if (i.status or "").lower() not in _CLOSED_STATUSES]
+    sources = [
+        {"type": "meeting_action_item", "id": i.id, "label": i.description[:80]} for i in rows
+    ]
+    if not open_rows:
+        return ToolResult(
+            summary=(
+                f"Project {project_id} has {len(rows)} action item(s) on record, none still open."
+            ),
+            data={"count": len(rows), "open_count": 0, "overdue_count": 0},
+            sources=sources,
+        )
+    today = datetime.now(UTC).date()
+
+    def _is_overdue(item: MeetingActionItem) -> bool:
+        return item.due_date is not None and item.due_date < today
+
+    overdue = [i for i in open_rows if _is_overdue(i)]
+    # An action item's description is written by the meeting-summary workflow from raw notes,
+    # which may originate in an uploaded document — so it is untrusted text on the same footing
+    # as anything else retrieved, and is shielded accordingly.
+    lines = [
+        _shield(
+            f"- [owner {item.owner or 'unassigned'}, "
+            f"due {item.due_date or 'no date'}{', OVERDUE' if _is_overdue(item) else ''}, "
+            f"status {item.status}]",
+            item.description,
+        )
+        for item in open_rows[:10]
+    ]
+    summary = (
+        f"Project {project_id} has {len(open_rows)} open action item(s) of {len(rows)} on "
+        f"record, {len(overdue)} overdue.\n" + "\n".join(lines)
+    )
+    return ToolResult(
+        summary=summary,
+        data={
+            "count": len(rows),
+            "open_count": len(open_rows),
+            "overdue_count": len(overdue),
+        },
+        sources=sources,
+    )
+
+
 async def _find_project(ctx: ToolContext, query: str) -> ToolResult:
     like = f"%{query}%"
     stmt = (
@@ -552,6 +672,22 @@ def build_tool_registry() -> dict[str, Tool]:
             handler=_get_safety_events,
             # No REST endpoint exists for this table; open to any agent-eligible role,
             # matching every other read-only operational lookup in this registry.
+        ),
+        Tool(
+            name="get_project_risks",
+            description="List a project's risk register — title, severity, likelihood, status, "
+            "and owner — highest severity first, with a count of how many remain open.",
+            params=[ToolParam("project_id", "int", True, "the project id")],
+            handler=_get_project_risks,
+            # Matches GET /projects/{id}/risks (CurrentUser — open to any authenticated role).
+        ),
+        Tool(
+            name="get_open_action_items",
+            description="List a project's unresolved meeting action items, with owner, due date, "
+            "and which ones are overdue.",
+            params=[ToolParam("project_id", "int", True, "the project id")],
+            handler=_get_open_action_items,
+            # Matches GET /meetings/{id}/action-items (CurrentUser — open to any role).
         ),
         Tool(
             name="remember",
