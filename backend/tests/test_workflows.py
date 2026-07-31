@@ -1,6 +1,8 @@
 from sqlalchemy import func, select
 
+from app.agents.workflows.base import record_workflow_memory
 from app.models import AiAuditLog, AiMemory, Supplier, SupplierEvaluation
+from app.schemas.memory import MemoryCategory, MemoryCreate
 
 
 async def _incomplete_pr_id(client, headers) -> int:
@@ -130,3 +132,142 @@ async def test_pr_review_keeps_deterministic_risk_and_approvals(db_session):
     assert "Everyone" not in review.required_approvals
     assert review.material_category == "Structural Steel"
     assert review.recommendation == "Escalate to the commercial lead."
+
+
+async def _live_memories(db_session, source_type, source_id=None):
+    query = select(AiMemory).where(
+        AiMemory.source_type == source_type, AiMemory.superseded_by_id.is_(None)
+    )
+    if source_id is not None:
+        query = query.where(AiMemory.source_id == source_id)
+    return list(await db_session.scalars(query))
+
+
+async def test_pr_review_records_a_procurement_blocker_memory(client, admin_headers, db_session):
+    # Only three of the six workflows fed enterprise memory, so a reviewed purchase request left
+    # nothing behind for a later review to learn from — half of the brief's headline promise.
+    pr_id = await _incomplete_pr_id(client, admin_headers)
+    await client.post(
+        "/api/v1/procurement/purchase-requests/analyze",
+        json={"pr_id": pr_id},
+        headers=admin_headers,
+    )
+    memories = await _live_memories(db_session, "purchase_request", pr_id)
+    assert len(memories) == 1
+    assert memories[0].category == "procurement_blocker"
+
+
+async def test_re_reviewing_a_purchase_request_does_not_duplicate_its_memory(
+    client, admin_headers, db_session
+):
+    # A review can be re-run any number of times, but the request being incomplete is a property
+    # of the record — it does not become truer on each pass, and must not multiply.
+    pr_id = await _incomplete_pr_id(client, admin_headers)
+    for _ in range(3):
+        await client.post(
+            "/api/v1/procurement/purchase-requests/analyze",
+            json={"pr_id": pr_id},
+            headers=admin_headers,
+        )
+    assert len(await _live_memories(db_session, "purchase_request", pr_id)) == 1
+
+
+async def test_rfi_escalation_records_the_backlog(client, admin_headers, db_session):
+    await client.post("/api/v1/rfis/32/analyze", headers=admin_headers)
+    memories = await _live_memories(db_session, "rfi_escalation", 32)
+    assert len(memories) == 1
+    assert memories[0].category == "issue"
+
+
+async def test_re_running_rfi_escalation_on_an_unchanged_backlog_keeps_one_live_memory(
+    client, admin_headers, db_session
+):
+    # An unchanged backlog produces an identical summary, which create_memory recognizes as an
+    # exact repeat and returns the existing record for. The record must survive that untouched:
+    # an earlier version of the supersede logic pointed the row at itself, setting its own
+    # superseded_by_id and silently removing the finding from every search.
+    await client.post("/api/v1/rfis/32/analyze", headers=admin_headers)
+    first = await _live_memories(db_session, "rfi_escalation", 32)
+    assert len(first) == 1
+
+    await client.post("/api/v1/rfis/32/analyze", headers=admin_headers)
+    live = await _live_memories(db_session, "rfi_escalation", 32)
+    assert len(live) == 1
+    assert live[0].id == first[0].id
+    assert live[0].superseded_by_id is None
+
+
+async def test_workflow_memory_serializes_concurrent_writes_for_the_same_source(db_session):
+    # Guards the advisory lock that makes the check-then-write section atomic. A genuine race
+    # needs separate committed transactions, which this suite's single rolled-back transaction
+    # cannot express, so the behaviour was proven live instead (six concurrent writes produced
+    # six live rows before the lock and exactly one after). What is asserted here is that the
+    # lock is actually taken — without it the live proof silently regresses to the broken case.
+    from unittest.mock import patch
+
+    executed: list[str] = []
+    original = db_session.execute
+
+    async def _record(statement, *args, **kwargs):
+        executed.append(str(statement))
+        return await original(statement, *args, **kwargs)
+
+    with patch.object(db_session, "execute", _record):
+        await record_workflow_memory(
+            db_session,
+            data=MemoryCreate(
+                project_id=3, category=MemoryCategory.ISSUE, summary="Lock probe.",
+                source_type="lock_probe", source_id=3, confidence=0.7,
+            ),
+        )
+    assert any("pg_advisory_xact_lock" in statement for statement in executed)
+
+
+async def test_supersede_replaces_the_live_memory_when_the_finding_changes(db_session):
+    # The moving-position case the supersede flag exists for: a genuinely changed finding
+    # replaces its predecessor, which stays on file as history but leaves retrieval.
+    def _payload(summary):
+        return MemoryCreate(
+            project_id=32, category=MemoryCategory.ISSUE, summary=summary,
+            source_type="rfi_escalation_probe", source_id=32, confidence=0.7,
+        )
+
+    first = await record_workflow_memory(db_session, data=_payload("4 overdue RFIs."))
+    second = await record_workflow_memory(
+        db_session, data=_payload("9 overdue RFIs."), supersede=True
+    )
+    assert second is not None and second.id != first.id
+    assert first.superseded_by_id == second.id
+    live = await _live_memories(db_session, "rfi_escalation_probe", 32)
+    assert [m.id for m in live] == [second.id]
+
+
+async def test_rfi_escalation_records_nothing_when_no_rfis_are_overdue(
+    client, admin_headers, db_session
+):
+    # A clean project carries no lesson; recording "nothing is wrong" every run would be noise.
+    response = await client.post("/api/v1/rfis/999999/analyze", headers=admin_headers)
+    assert response.status_code in {200, 404}
+    if response.status_code == 200 and response.json()["overdue_count"] == 0:
+        assert await _live_memories(db_session, "rfi_escalation", 999999) == []
+
+
+async def test_executive_report_memory_supersedes_instead_of_accumulating(
+    client, admin_headers, db_session
+):
+    # The weekly scheduled run calls this with store=True. Appending would add a near-identical
+    # row every week and steadily crowd real lessons out of retrieval, so it must supersede.
+    for _ in range(3):
+        await client.post(
+            "/api/v1/reports/executive-weekly", json={"store": True}, headers=admin_headers
+        )
+    assert len(await _live_memories(db_session, "executive_report")) == 1
+
+
+async def test_executive_report_writes_no_memory_when_not_storing(
+    client, admin_headers, db_session
+):
+    await client.post(
+        "/api/v1/reports/executive-weekly", json={"store": False}, headers=admin_headers
+    )
+    assert await _live_memories(db_session, "executive_report") == []

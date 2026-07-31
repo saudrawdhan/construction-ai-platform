@@ -8,8 +8,9 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.workflows.base import gather_memory_context
+from app.agents.workflows.base import gather_memory_context, record_workflow_memory
 from app.models import Rfi
+from app.schemas.memory import MemoryCategory, MemoryCreate
 from app.schemas.workflows import RfiEscalation, RfiEscalationItem
 from app.services.audit import log_ai_call
 from app.services.llm import LLMClient
@@ -77,6 +78,32 @@ async def run(db: AsyncSession, *, project_id: int, llm: LLMClient) -> RfiEscala
                 max_tokens=600,
             )
             message = result.text.strip() or message
+
+    # "No overdue RFIs" is the healthy state and carries no lesson, so only a real backlog is
+    # recorded. The backlog is a moving position rather than a fixed fact about a record, so a
+    # re-run supersedes the previous entry instead of stacking another one beside it.
+    if items:
+        worst = items[0]
+        await record_workflow_memory(
+            db,
+            data=MemoryCreate(
+                project_id=project_id,
+                category=MemoryCategory.ISSUE,
+                summary=(
+                    f"{len(items)} overdue RFI(s) blocking project {project_id}; longest is "
+                    f"{worst.rfi_number} at {worst.days_overdue} days ({worst.discipline})."
+                ),
+                detail="\n".join(
+                    f"{i.rfi_number} ({i.discipline}), {i.days_overdue}d overdue, "
+                    f"assigned to {i.assigned_to}, priority {i.priority}"
+                    for i in items[:10]
+                ),
+                source_type="rfi_escalation",
+                source_id=project_id,
+                confidence=0.7,
+            ),
+            supersede=True,
+        )
 
     await log_ai_call(
         db,

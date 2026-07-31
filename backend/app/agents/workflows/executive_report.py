@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.workflows.base import record_workflow_memory
 from app.models import (
     AiSummary,
     Claim,
@@ -18,6 +19,7 @@ from app.models import (
     Rfi,
     SafetyEvent,
 )
+from app.schemas.memory import MemoryCategory, MemoryCreate
 from app.schemas.workflows import ExecutiveReport, ExecutiveReportRequest
 from app.services.audit import log_ai_call
 from app.services.llm import LLMClient
@@ -102,6 +104,27 @@ async def run(
         db.add(summary)
         await db.flush()
         summary_id = summary.id
+
+        # The KPI figures themselves are recomputable from the database at any moment, so they
+        # are not knowledge; the management reading of them is. Only the narrative is kept, and
+        # it always supersedes the previous one for this scope — the weekly scheduled run calls
+        # this with store=True, so appending instead would add a near-identical row every week
+        # and steadily crowd genuine lessons out of retrieval.
+        await record_workflow_memory(
+            db,
+            data=MemoryCreate(
+                project_id=project_id,
+                category=MemoryCategory.ISSUE,
+                summary=f"Executive position for {scope.lower()} as at {today}: " + "; ".join(
+                    highlights[:3]
+                ),
+                detail=narrative,
+                source_type="executive_report",
+                source_id=project_id,
+                confidence=0.6,
+            ),
+            supersede=True,
+        )
 
     await log_ai_call(
         db,

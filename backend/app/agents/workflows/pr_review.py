@@ -9,8 +9,13 @@ from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.prompts import PROCUREMENT_REVIEW_AGENT
-from app.agents.workflows.base import gather_memory_context, parse_json_object
+from app.agents.workflows.base import (
+    gather_memory_context,
+    parse_json_object,
+    record_workflow_memory,
+)
 from app.models import PurchaseOrder, PurchaseRequest, Supplier
+from app.schemas.memory import MemoryCategory, MemoryCreate
 from app.schemas.workflows import PurchaseRequestReview, SourceRef
 from app.services.audit import log_ai_call
 from app.services.llm import LLMClient
@@ -116,6 +121,26 @@ async def run(db: AsyncSession, *, pr_id: int, llm: LLMClient) -> PurchaseReques
         # the descriptive material category and the written recommendation.
         category = parsed.get("material_category") or category
         recommendation = parsed.get("recommendation") or recommendation
+
+    # Only a review that actually found something is worth remembering: a complete, low-risk
+    # request is the expected case and recording it would dilute the procurement history that
+    # later reviews retrieve. Keyed to the request, so re-reviewing it never duplicates.
+    if missing or risk == "High":
+        await record_workflow_memory(
+            db,
+            data=MemoryCreate(
+                project_id=pr.project_id,
+                category=MemoryCategory.PROCUREMENT_BLOCKER,
+                summary=(
+                    f"PR {pr.request_no} ({category or 'uncategorized'}): {risk} risk. "
+                    f"Missing: {', '.join(missing) if missing else 'nothing'}."
+                ),
+                detail=recommendation,
+                source_type="purchase_request",
+                source_id=pr.id,
+                confidence=0.75,
+            ),
+        )
 
     await log_ai_call(
         db,
