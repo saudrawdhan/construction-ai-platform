@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, ShieldCheck, ShieldAlert, FileText, BrainCircuit, Mail } from "lucide-react";
+import { Send, ShieldCheck, ShieldAlert, FileText, BrainCircuit, Mail, TriangleAlert, ListChecks, Gavel } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { PageHeader, ProviderTag } from "../components/ui";
@@ -8,6 +8,8 @@ interface Source {
   type: string;
   id: number | null;
   label: string;
+  project_id: number | null;
+  project_label: string | null;
 }
 interface Answer {
   conversation_id: number;
@@ -23,13 +25,25 @@ interface Turn {
   answer?: Answer;
 }
 
+function sourceIcon(type: string) {
+  if (type === "memory") return <BrainCircuit size={12} />;
+  if (type === "correspondence") return <Mail size={12} />;
+  if (type === "project_risk") return <TriangleAlert size={12} />;
+  if (type === "meeting_action_item") return <ListChecks size={12} />;
+  if (type === "project_decision") return <Gavel size={12} />;
+  return <FileText size={12} />;
+}
+
 function SourceChip({ source }: { source: Source }) {
-  const icon =
-    source.type === "memory" ? <BrainCircuit size={12} /> : source.type === "correspondence" ? <Mail size={12} /> : <FileText size={12} />;
   return (
     <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs text-slate-600 ring-1 ring-inset ring-slate-200">
-      {icon}
+      {sourceIcon(source.type)}
       {source.label}
+      {/* Which project a cited record belongs to, so an answer drawing on another project is
+          visible at a glance rather than only inside the narrative text. */}
+      {source.project_label && (
+        <span className="text-slate-400">· {source.project_label}</span>
+      )}
     </span>
   );
 }

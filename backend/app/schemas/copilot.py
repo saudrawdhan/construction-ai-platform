@@ -8,9 +8,13 @@ class CopilotChatRequest(BaseModel):
 
 
 class CopilotSource(BaseModel):
-    type: str  # memory | document | correspondence
+    type: str  # memory | document | correspondence | project_risk | meeting_action_item
     id: int | None
     label: str
+    # Which project the cited record actually belongs to. Surfaced so a reader can tell at a
+    # glance when an answer is drawing on a project other than the one they asked about.
+    project_id: int | None = None
+    project_label: str | None = None
 
 
 class CopilotAnswer(BaseModel):
