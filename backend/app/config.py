@@ -1,6 +1,12 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Shipped in the repo and therefore public knowledge: anyone can mint a valid admin token with
+# it. Usable for local development only — see the validator at the bottom of Settings.
+DEFAULT_JWT_SECRET = "dev-secret-change-me-in-production-please-32bytes-min"
+MIN_JWT_SECRET_LENGTH = 32
 
 # Endpoint and default model for each supported provider. Any OpenAI-compatible engine works;
 # these presets let an operator select one with a single LLM_PROVIDER value. Explicit
@@ -54,7 +60,7 @@ class Settings(BaseSettings):
     # Mounted to a dedicated named volume in docker-compose.yml, not the repo tree.
     upload_dir: str = "/uploads"
 
-    jwt_secret: str = "dev-secret-change-me-in-production-please-32bytes-min"
+    jwt_secret: str = DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
@@ -69,6 +75,35 @@ class Settings(BaseSettings):
         set explicitly. Explicit LLM_BASE_URL / LLM_MODEL always win."""
         preset = LLM_PRESETS.get(self.llm_provider, ("", ""))
         return (self.llm_base_url or preset[0], self.llm_model or preset[1])
+
+    @model_validator(mode="after")
+    def _require_a_real_jwt_secret_outside_development(self) -> "Settings":
+        """Refuse to start on a signing key that cannot be trusted.
+
+        A forgeable key is not a degraded state the application can usefully run in — every
+        role gate, approval, and audit entry rests on the token being unforgeable — so this
+        fails at startup rather than serving traffic that only looks authenticated. Only the
+        literal environment "development" is exempt: anything else, including a value nobody
+        anticipated, is treated as deployed and must carry a real secret.
+        """
+        if self.environment.strip().lower() == "development":
+            return self
+        remedy = (
+            'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"'
+        )
+        if self.jwt_secret == DEFAULT_JWT_SECRET:
+            raise ValueError(
+                f"JWT_SECRET is still the built-in development default while ENVIRONMENT is "
+                f"'{self.environment}'. That value is published in this repository, so anyone "
+                f"could sign a valid administrator token. Set a unique JWT_SECRET. {remedy}"
+            )
+        if len(self.jwt_secret) < MIN_JWT_SECRET_LENGTH:
+            raise ValueError(
+                f"JWT_SECRET is {len(self.jwt_secret)} characters; at least "
+                f"{MIN_JWT_SECRET_LENGTH} are required outside development so the HS256 signing "
+                f"key cannot be brute-forced. {remedy}"
+            )
+        return self
 
 
 @lru_cache

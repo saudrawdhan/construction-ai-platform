@@ -143,6 +143,14 @@ variables through the single `Settings` object. The `.env` file is git-ignored a
 git-ignored. On a hosted deployment the same variables are supplied by the platform's secret store,
 using the same code path.
 
+The signing key is enforced rather than merely documented: unless `ENVIRONMENT` is exactly
+`development`, the application refuses to start if `JWT_SECRET` is still the repository's published
+development default or is shorter than 32 characters. A forgeable signing key is not a degraded
+state the platform can usefully run in — every role gate, approval, and audit entry depends on the
+token being unforgeable — so a misconfigured deployment fails immediately and loudly instead of
+serving traffic that only appears to be authenticated. The check fails closed: any environment name
+other than `development` is treated as deployed.
+
 ## Input handling
 
 Request bodies are validated by Pydantic before any handler runs, which rejects malformed input with

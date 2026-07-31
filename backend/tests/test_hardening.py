@@ -2,6 +2,7 @@ import uuid
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.security.rate_limit import rate_limiter
 from app.security.tokens import create_access_token
@@ -174,3 +175,51 @@ async def test_dbapi_handler_reraises_non_data_errors():
     server_exc.orig.sqlstate = "42P01"
     with pytest.raises(DBAPIError):
         await dbapi_error_handler(None, server_exc)
+
+
+def _settings(**overrides):
+    # Explicit init values outrank the environment and .env in pydantic-settings, so each case
+    # is exercised exactly as configured regardless of how this machine happens to be set up.
+    from app.config import Settings
+
+    defaults = {"environment": "production", "jwt_secret": "x" * 40}
+    return Settings(**{**defaults, **overrides})
+
+
+def test_startup_rejects_the_default_jwt_secret_outside_development():
+    # The default is published in this repository, so accepting it in a deployed environment
+    # would let anyone sign a valid administrator token — every role gate rests on this key.
+    from app.config import DEFAULT_JWT_SECRET
+
+    with pytest.raises(ValidationError) as excinfo:
+        _settings(jwt_secret=DEFAULT_JWT_SECRET)
+    assert "JWT_SECRET" in str(excinfo.value)
+
+
+def test_startup_rejects_a_short_jwt_secret_outside_development():
+    with pytest.raises(ValidationError):
+        _settings(jwt_secret="tooshort")
+
+
+def test_startup_accepts_a_real_jwt_secret_outside_development():
+    assert _settings(jwt_secret="s" * 64).jwt_secret == "s" * 64
+
+
+def test_development_still_runs_on_the_default_jwt_secret():
+    # Local development and the test suite both use the shipped default; the guard must not
+    # turn a working checkout into a startup failure.
+    from app.config import DEFAULT_JWT_SECRET
+
+    settings = _settings(environment="development", jwt_secret=DEFAULT_JWT_SECRET)
+    assert settings.jwt_secret == DEFAULT_JWT_SECRET
+
+
+def test_an_unrecognized_environment_is_treated_as_deployed():
+    # Fail closed: only the literal "development" is exempt, so a typo or a new environment
+    # name can never silently downgrade the check to permissive.
+    from app.config import DEFAULT_JWT_SECRET
+
+    with pytest.raises(ValidationError):
+        _settings(environment="staging", jwt_secret=DEFAULT_JWT_SECRET)
+    with pytest.raises(ValidationError):
+        _settings(environment="dev", jwt_secret=DEFAULT_JWT_SECRET)
