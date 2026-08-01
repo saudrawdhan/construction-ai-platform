@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, ShieldCheck, ShieldAlert, FileText, BrainCircuit, Mail, TriangleAlert, ListChecks, Gavel } from "lucide-react";
+import { Send, ShieldCheck, ShieldAlert, FileText, BrainCircuit, Mail, TriangleAlert, ListChecks, Gavel, CircleAlert, Flag } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { PageHeader, ProviderTag } from "../components/ui";
@@ -31,6 +31,8 @@ function sourceIcon(type: string) {
   if (type === "project_risk") return <TriangleAlert size={12} />;
   if (type === "meeting_action_item") return <ListChecks size={12} />;
   if (type === "project_decision") return <Gavel size={12} />;
+  if (type === "project_issue") return <CircleAlert size={12} />;
+  if (type === "project_milestone") return <Flag size={12} />;
   return <FileText size={12} />;
 }
 

@@ -183,7 +183,7 @@ export default function Rfis() {
               <tr key={r.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.rfi_number}</td>
                 <td className="px-4 py-3 text-slate-800">{r.subject}</td>
-                <td className="px-4 py-3 text-slate-600">{r.discipline}</td>
+                <td className="px-4 py-3 text-slate-600">{enumLabel(r.discipline, t)}</td>
                 <td className="px-4 py-3 text-slate-600">{r.assigned_to}</td>
                 <td className="px-4 py-3 text-slate-600">{date(r.required_date)}</td>
                 <td className="px-4 py-3">
@@ -245,7 +245,7 @@ export default function Rfis() {
                       <div className="mt-1 text-sm font-medium text-slate-800">{it.subject}</div>
                       <div className="mt-1 text-sm text-slate-600">{it.suggested_action}</div>
                       <div className="mt-1 text-xs text-slate-400">
-                        {it.discipline} · {it.assigned_to}
+                        {enumLabel(it.discipline, t)} · {it.assigned_to}
                       </div>
                     </div>
                   ))}

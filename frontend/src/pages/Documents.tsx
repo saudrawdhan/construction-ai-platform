@@ -234,14 +234,18 @@ function SearchTab({ projects }: { projects: ProjectOption[] }) {
       {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
       {results && (
         <div className="space-y-3">
-          {results.map((hit) => (
+          {results.map((hit, index) => (
             <div key={hit.id} className="rounded-lg border border-slate-200 p-4">
               <div className="mb-1 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Badge tone="blue">{enumLabel(hit.source_type, t)}</Badge>
                   <span className="text-xs text-slate-400">{projectName(hit.project_id)}</span>
                 </div>
-                <span className="text-xs font-medium text-blue-600">{t("doc.score", { n: hit.score.toFixed(4) })}</span>
+                {/* Retrieval fuses two rankings with Reciprocal Rank Fusion, so the raw score is
+                    1/(60+rank) — 0.0164 at best. Printed as a bare "score", that reads as a 1.6%
+                    match to anyone who does not know the formula. The ordering is the only thing
+                    the number actually encodes, so the rank is shown instead. */}
+                <span className="text-xs font-medium text-blue-600">{t("doc.rank", { n: index + 1 })}</span>
               </div>
               <p className="text-sm text-slate-700">{hit.content}</p>
             </div>

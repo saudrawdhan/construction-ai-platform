@@ -375,7 +375,7 @@ export const en: Record<string, string> = {
 
   // Copilot page
   "copilot.title": "Construction Copilot",
-  "copilot.subtitle": "Grounded Q&A over enterprise memory and the document corpus",
+  "copilot.subtitle": "Grounded Q&A over enterprise memory, the document corpus, and the project registers",
   "copilot.emptyHint1": "Ask about project risks, supplier performance, decisions, or safety.",
   "copilot.emptyHint2": "The copilot only answers from retrieved evidence — and says so when it finds none.",
   "copilot.grounded": "Grounded",
@@ -537,7 +537,7 @@ export const en: Record<string, string> = {
   "doc.query": "Query",
   "doc.queryPlaceholder": "e.g. delayed steel delivery, unsafe work at height",
   "doc.searching": "Searching…",
-  "doc.score": "score {n}",
+  "doc.rank": "match #{n}",
   "doc.noPassages": "No matching passages found.",
   "doc.docType": "Document type",
   "doc.titleOptional": "Title (optional)",
@@ -643,6 +643,12 @@ export const en: Record<string, string> = {
   "enum.facade": "Facade",
   "enum.finishing": "Finishing",
   "enum.safety": "Safety",
+
+  // RFI disciplines (civil, MEP and facade are shared with the material categories above)
+  "enum.structural": "Structural",
+  "enum.architectural": "Architectural",
+  "enum.finishes": "Finishes",
+
   "enum.issued": "Issued",
   "enum.delivered": "Delivered",
   "enum.cancelled": "Cancelled",

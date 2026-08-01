@@ -372,7 +372,7 @@ export const ar: Record<string, string> = {
 
   // Copilot page
   "copilot.title": "مساعد الإنشاءات",
-  "copilot.subtitle": "أسئلة وأجوبة موثّقة من ذاكرة المؤسسة ومجموعة المستندات",
+  "copilot.subtitle": "أسئلة وأجوبة موثّقة من ذاكرة المؤسسة ومجموعة المستندات وسجلات المشروع",
   "copilot.emptyHint1": "اسأل عن مخاطر المشاريع، أو أداء الموردين، أو القرارات، أو السلامة.",
   "copilot.emptyHint2": "يجيب المساعد فقط من الأدلة المسترجعة — ويصرّح بذلك عندما لا يجد أيًّا منها.",
   "copilot.grounded": "موثّق",
@@ -534,7 +534,7 @@ export const ar: Record<string, string> = {
   "doc.query": "الاستعلام",
   "doc.queryPlaceholder": "مثال: تأخر تسليم الحديد، عمل غير آمن على ارتفاع",
   "doc.searching": "جارٍ البحث…",
-  "doc.score": "الدرجة {n}",
+  "doc.rank": "النتيجة رقم {n}",
   "doc.noPassages": "لم يُعثر على مقاطع مطابقة.",
   "doc.docType": "نوع المستند",
   "doc.titleOptional": "العنوان (اختياري)",
@@ -640,6 +640,12 @@ export const ar: Record<string, string> = {
   "enum.facade": "واجهات",
   "enum.finishing": "تشطيبات",
   "enum.safety": "سلامة",
+
+  // RFI disciplines (civil, MEP and facade are shared with the material categories above)
+  "enum.structural": "إنشائي",
+  "enum.architectural": "معماري",
+  "enum.finishes": "تشطيبات",
+
   "enum.issued": "صادر",
   "enum.delivered": "مُسلَّم",
   "enum.cancelled": "ملغى",

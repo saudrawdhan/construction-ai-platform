@@ -132,7 +132,7 @@ export default function Dashboard() {
                     <tr key={r.rfi_number} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.rfi_number}</td>
                       <td className="px-4 py-3 text-slate-800">{r.subject}</td>
-                      <td className="px-4 py-3 text-slate-600">{r.discipline}</td>
+                      <td className="px-4 py-3 text-slate-600">{enumLabel(r.discipline, t)}</td>
                       <td className="px-4 py-3 text-slate-600">{r.required_date}</td>
                       <td className="px-4 py-3">
                         <Badge tone={statusTone(r.priority)}>{enumLabel(r.priority, t)}</Badge>

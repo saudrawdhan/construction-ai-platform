@@ -1,4 +1,4 @@
-import type { Translate } from "./i18n";
+import { currentLang, type Translate } from "./i18n";
 
 export function money(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -10,9 +10,14 @@ export function date(value: string | null | undefined): string {
   return value.slice(0, 10);
 }
 
-export function dateTime(value: string | null | undefined): string {
+// `undefined` as the locale means "whatever the browser is set to", which left every timestamp in
+// English while the rest of an Arabic page was translated. The interface language is the correct
+// signal; the Gregorian calendar is pinned so an Arabic reader still sees the same date the record
+// actually carries rather than a Hijri conversion of it.
+export function dateTime(value: string | null | undefined, language = currentLang()): string {
   if (!value) return "—";
-  return new Date(value).toLocaleString(undefined, {
+  const locale = language === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB";
+  return new Date(value).toLocaleString(locale, {
     year: "numeric",
     month: "short",
     day: "numeric",
