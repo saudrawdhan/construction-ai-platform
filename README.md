@@ -269,7 +269,7 @@ A 16 GB GPU runs a 7B model comfortably; inference falls back to CPU where no GP
 ## Testing and quality
 
 ```bash
-docker compose run --rm -e TESTING=1 api pytest -q   # 367 tests, offline, deterministic
+docker compose run --rm -e TESTING=1 api pytest -q   # 368 tests, offline, deterministic
 docker compose run --rm api ruff check app scripts tests
 ```
 
