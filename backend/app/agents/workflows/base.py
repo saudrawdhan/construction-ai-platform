@@ -91,6 +91,46 @@ async def record_workflow_memory(
     return memory
 
 
+_ARABIC_PROSE = (
+    "Write your entire response in Arabic (العربية). Keep record identifiers, codes and numbers "
+    "exactly as given — translate the prose around them, never the values themselves."
+)
+
+# Deliberately separate from the prose instruction: these workflows parse the model's reply by key,
+# so a translated key silently breaks extraction while still looking like a valid answer.
+_ARABIC_JSON = (
+    "Write every free-text VALUE in your JSON response in Arabic (العربية). The JSON field NAMES "
+    "must stay exactly as specified in English, and identifiers, codes and numbers must be kept "
+    "exactly as given."
+)
+
+
+def localize(system: str, language: str, *, json_mode: bool = False) -> str:
+    """Append an output-language instruction to a system prompt when Arabic is requested.
+
+    English is the prompts' own language, so it needs no instruction and the prompt is returned
+    unchanged — that keeps the default path byte-identical to how every one of these workflows
+    behaved before."""
+    if (language or "en").lower() != "ar":
+        return system
+    return f"{system}\n\n{_ARABIC_JSON if json_mode else _ARABIC_PROSE}"
+
+
+def language_note(language: str, *, json_mode: bool = False) -> str:
+    """The same directive on its own, for a caller that must place it at the END of the user
+    message instead of relying on the system prompt.
+
+    Five of the six workflows follow the system-prompt instruction on their own. The purchase
+    request review does not: its user message closes by naming the English JSON fields to return,
+    and a small local model follows the most recent instruction it saw — observed answering in
+    English on every attempt until the directive moved after that closing line. Returns an empty
+    string for English so the caller appends nothing at all.
+    """
+    if (language or "en").lower() != "ar":
+        return ""
+    return _ARABIC_JSON if json_mode else _ARABIC_PROSE
+
+
 def parse_json_object(raw: str) -> dict:
     try:
         payload = json.loads(raw)

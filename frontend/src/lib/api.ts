@@ -1,4 +1,4 @@
-import { translate } from "./i18n";
+import { currentLang, translate } from "./i18n";
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api/v1";
 
@@ -24,18 +24,41 @@ function notifySessionEnded() {
   window.dispatchEvent(new Event("auth:logout"));
 }
 
+/** A FastAPI validation failure returns `detail` as a LIST of per-field errors, not a string.
+ *  Without unpacking it the form could only say "request failed", leaving the user to guess which
+ *  field the server rejected. `loc` is a path like ["body", "budget"]; the transport segment is
+ *  dropped so the message names the field the user can actually see. */
+function fieldErrors(detail: unknown): string | null {
+  if (!Array.isArray(detail)) return null;
+  const messages = detail
+    .map((entry) => {
+      const item = entry as { loc?: unknown; msg?: unknown };
+      const message = typeof item.msg === "string" ? item.msg : "";
+      if (!message) return "";
+      const path = Array.isArray(item.loc)
+        ? item.loc.filter((part): part is string => typeof part === "string" && part !== "body")
+        : [];
+      return path.length ? `${path.join(".")}: ${message}` : message;
+    })
+    .filter(Boolean);
+  return messages.length ? messages.join("; ") : null;
+}
+
 async function readError(res: Response, fallback: string): Promise<string> {
-  let detail = res.statusText;
+  let detail: unknown = res.statusText;
   try {
     detail = (await res.json()).detail ?? detail;
   } catch {
     /* body was not JSON */
   }
-  return typeof detail === "string" ? detail : fallback;
+  if (typeof detail === "string") return detail;
+  return fieldErrors(detail) ?? fallback;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {};
+  // The backend generates AI prose in this language: a workflow analyzes stored records rather
+  // than a written question, so the interface language is the only signal it has to go on.
+  const headers: Record<string, string> = { "Accept-Language": currentLang() };
   if (body !== undefined) headers["Content-Type"] = "application/json";
 
   const res = await fetch(`${BASE}${path}`, {

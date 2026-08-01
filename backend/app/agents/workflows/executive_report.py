@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.workflows.base import record_workflow_memory
+from app.agents.workflows.base import localize, record_workflow_memory
 from app.models import (
     AiSummary,
     Claim,
@@ -35,7 +35,7 @@ async def _count(db, model, *conditions) -> int:
 
 
 async def run(
-    db: AsyncSession, *, payload: ExecutiveReportRequest, llm: LLMClient
+    db: AsyncSession, *, payload: ExecutiveReportRequest, llm: LLMClient, language: str = "en"
 ) -> ExecutiveReport:
     project_id = payload.project_id
     today = date.today()
@@ -85,7 +85,10 @@ async def run(
 
     if llm.provider != "mock":
         result = await llm.complete(
-            system="You write concise executive construction status reports for senior management.",
+            system=localize(
+                "You write concise executive construction status reports for senior management.",
+                language,
+            ),
             messages=[{"role": "user", "content": "KPIs:\n" + "\n".join(highlights)}],
             max_tokens=700,
         )

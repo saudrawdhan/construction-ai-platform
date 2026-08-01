@@ -271,3 +271,38 @@ async def test_executive_report_writes_no_memory_when_not_storing(
         "/api/v1/reports/executive-weekly", json={"store": False}, headers=admin_headers
     )
     assert await _live_memories(db_session, "executive_report") == []
+
+
+def test_localize_leaves_english_prompts_untouched():
+    # English is the prompts' own language, so the default path must stay byte-identical to how
+    # every workflow behaved before language handling existed.
+    from app.agents.workflows.base import localize
+
+    assert localize("Base prompt.", "en") == "Base prompt."
+    assert localize("Base prompt.", "") == "Base prompt."
+    assert localize("Base prompt.", "fr") == "Base prompt."
+
+
+def test_localize_asks_for_arabic_prose_and_protects_json_keys():
+    # A translated JSON key silently breaks extraction while still looking like a valid answer,
+    # so the JSON variant must pin the field names to English.
+    from app.agents.workflows.base import localize
+
+    prose = localize("Base prompt.", "ar")
+    assert "العربية" in prose
+    assert "JSON" not in prose
+
+    structured = localize("Base prompt.", "ar", json_mode=True)
+    assert "العربية" in structured
+    assert "field NAMES must stay exactly as specified in English" in structured
+
+
+def test_request_language_reads_the_header_and_falls_back_safely():
+    from app.api.deps import request_language
+
+    assert request_language("ar") == "ar"
+    assert request_language("ar-SA,ar;q=0.9,en;q=0.8") == "ar"
+    assert request_language("en-GB,en;q=0.9") == "en"
+    assert request_language(None) == "en"
+    assert request_language("") == "en"
+    assert request_language("de") == "en"

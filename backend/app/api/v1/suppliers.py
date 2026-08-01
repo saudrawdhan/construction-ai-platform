@@ -13,7 +13,7 @@ from fastapi import (
 )
 
 from app.agents.workflows import supplier_risk
-from app.api.deps import DbSession
+from app.api.deps import DbSession, RequestLanguage
 from app.api.v1.import_helpers import handle_tabular_import
 from app.models import User
 from app.schemas.common import Page
@@ -94,9 +94,11 @@ async def import_suppliers(
 
 @router.post("/{supplier_id}/risk-assessment", response_model=SupplierRiskAssessment)
 async def assess_supplier_risk(
-    supplier_id: int, db: DbSession, _: RiskRoles
+    supplier_id: int, db: DbSession, _: RiskRoles, language: RequestLanguage
 ) -> SupplierRiskAssessment:
-    assessment = await supplier_risk.run(db, supplier_id=supplier_id, llm=get_llm())
+    assessment = await supplier_risk.run(
+        db, supplier_id=supplier_id, llm=get_llm(), language=language
+    )
     if assessment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Supplier not found")
     await db.commit()

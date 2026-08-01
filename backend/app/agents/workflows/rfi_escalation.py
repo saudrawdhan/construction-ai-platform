@@ -8,7 +8,11 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.workflows.base import gather_memory_context, record_workflow_memory
+from app.agents.workflows.base import (
+    gather_memory_context,
+    localize,
+    record_workflow_memory,
+)
 from app.models import Rfi
 from app.schemas.memory import MemoryCategory, MemoryCreate
 from app.schemas.workflows import RfiEscalation, RfiEscalationItem
@@ -24,7 +28,9 @@ def _suggested_action(priority: str, days_overdue: int) -> str:
     return "Follow up in the next coordination meeting."
 
 
-async def run(db: AsyncSession, *, project_id: int, llm: LLMClient) -> RfiEscalation:
+async def run(
+    db: AsyncSession, *, project_id: int, llm: LLMClient, language: str = "en"
+) -> RfiEscalation:
     today = date.today()
     rows = await db.scalars(
         select(Rfi)
@@ -73,7 +79,9 @@ async def run(db: AsyncSession, *, project_id: int, llm: LLMClient) -> RfiEscala
                 "Draft a short, firm, professional escalation email to the consultant."
             )
             result = await llm.complete(
-                system="You draft concise construction escalation correspondence.",
+                system=localize(
+                    "You draft concise construction escalation correspondence.", language
+                ),
                 messages=[{"role": "user", "content": context}],
                 max_tokens=600,
             )

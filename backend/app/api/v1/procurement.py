@@ -13,7 +13,7 @@ from fastapi import (
 )
 
 from app.agents.workflows import pr_review
-from app.api.deps import DbSession
+from app.api.deps import DbSession, RequestLanguage
 from app.api.v1.import_helpers import handle_tabular_import
 from app.models import User
 from app.schemas.common import Page
@@ -53,9 +53,12 @@ PURCHASE_ORDER_TEMPLATE = (
 
 @router.post("/purchase-requests/analyze", response_model=PurchaseRequestReview)
 async def analyze_purchase_request(
-    payload: PRAnalyzeRequest, db: DbSession, _: ProcurementRoles
+    payload: PRAnalyzeRequest, db: DbSession, _: ProcurementRoles,
+    language: RequestLanguage,
 ) -> PurchaseRequestReview:
-    review = await pr_review.run(db, pr_id=payload.pr_id, llm=get_llm())
+    review = await pr_review.run(
+        db, pr_id=payload.pr_id, llm=get_llm(), language=language
+    )
     if review is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase request not found")
     await db.commit()

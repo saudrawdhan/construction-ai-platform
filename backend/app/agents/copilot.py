@@ -40,7 +40,11 @@ _STOPWORDS = frozenset(
 
 
 def _keyword_tsquery(question: str) -> str:
-    tokens = re.findall(r"[\w؀-ۿ]+", question.lower())
+    # `\w` is Unicode-aware, so it already matches Arabic letters while correctly excluding Arabic
+    # punctuation. An explicit U+0600-U+06FF range was previously added alongside it, which also
+    # swept in ؟ ، ؛ ٪ — so a question ending in the Arabic question mark (i.e. every natural one)
+    # produced a corrupted final token such as "المخاطر؟" that matches nothing. Do not re-add it.
+    tokens = re.findall(r"\w+", question.lower())
     terms = [t for t in tokens if len(t) >= 3 and t not in _STOPWORDS]
     return " | ".join(dict.fromkeys(terms))  # de-duplicate, keep order
 
@@ -328,7 +332,16 @@ class ConstructionCopilot:
                 "evidence shows, and never describe any of it as belonging to the project "
                 "asked about.\n\n" if lead else "\n\n"
             )
-            user_content = f"Question: {question}{instruction}Evidence:\n{context}"
+            # A question carries its own language, so the answer mirrors the question rather than
+            # the interface setting — asking in Arabic inside an English UI should still answer in
+            # Arabic. This was previously left to emerge on its own, which is not something a
+            # small local model reliably does.
+            user_content = (
+                f"Question: {question}{instruction}Evidence:\n{context}\n\n"
+                "Write your entire answer in the same language as the question above, including "
+                "any numbers — do not switch language mid-answer. Record identifiers and codes "
+                "stay exactly as written."
+            )
             result = await self._llm.complete(
                 system=CONSTRUCTION_OPS_ASSISTANT,
                 messages=[{"role": "user", "content": user_content}],

@@ -60,8 +60,12 @@ _STOPWORDS = frozenset(
 def keyword_tsquery(query: str) -> str:
     """Reduce free text to an OR-combined ``to_tsquery`` of substantive keywords. Stop words and
     short tokens are dropped so natural-language phrasing does not suppress every match; Arabic
-    tokens are preserved. Returns an empty string when nothing substantive remains."""
-    tokens = re.findall(r"[\w؀-ۿ]+", query.lower())
+    tokens are preserved. Returns an empty string when nothing substantive remains.
+
+    ``\\w`` is Unicode-aware and already matches Arabic letters while correctly excluding Arabic
+    punctuation. An explicit U+0600-U+06FF range was previously added alongside it, which also swept
+    in ؟ ، ؛ ٪ and corrupted the token they attached to. Do not re-add it."""
+    tokens = re.findall(r"\w+", query.lower())
     terms = [t for t in tokens if len(t) >= 3 and t not in _STOPWORDS]
     return " | ".join(dict.fromkeys(terms))
 

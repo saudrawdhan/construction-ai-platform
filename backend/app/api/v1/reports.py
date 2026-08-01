@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.agents.workflows import executive_report
-from app.api.deps import DbSession
+from app.api.deps import DbSession, RequestLanguage
 from app.models import User
 from app.schemas.workflows import ExecutiveReport, ExecutiveReportRequest
 from app.security.deps import require_roles
@@ -19,8 +19,11 @@ ReportRoles = Annotated[
 
 @router.post("/executive-weekly", response_model=ExecutiveReport)
 async def executive_weekly_report(
-    payload: ExecutiveReportRequest, db: DbSession, _: ReportRoles
+    payload: ExecutiveReportRequest, db: DbSession, _: ReportRoles,
+    language: RequestLanguage,
 ) -> ExecutiveReport:
-    result = await executive_report.run(db, payload=payload, llm=get_llm())
+    result = await executive_report.run(
+        db, payload=payload, llm=get_llm(), language=language
+    )
     await db.commit()
     return result

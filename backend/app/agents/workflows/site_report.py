@@ -8,7 +8,7 @@ import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.workflows.base import gather_memory_context
+from app.agents.workflows.base import gather_memory_context, localize
 from app.schemas.memory import MemoryCategory, MemoryCreate
 from app.schemas.workflows import SiteReportAnalysis, SiteReportAnalyzeRequest
 from app.services.audit import log_ai_call
@@ -71,7 +71,8 @@ def _parse_llm(raw: str):
 
 
 async def run(
-    db: AsyncSession, *, project_id: int, payload: SiteReportAnalyzeRequest, llm: LLMClient
+    db: AsyncSession, *, project_id: int, payload: SiteReportAnalyzeRequest, llm: LLMClient,
+    language: str = "en",
 ) -> SiteReportAnalysis:
     memory_context, memory_ids = await gather_memory_context(
         db, query=payload.text[:300], project_id=project_id, k=3
@@ -80,7 +81,7 @@ async def run(
     summary, completed, delays, risks, manpower, escalation = _heuristic(payload.text)
     if llm.provider != "mock":
         result = await llm.complete(
-            system=_ANALYZE_PROMPT,
+            system=localize(_ANALYZE_PROMPT, language, json_mode=True),
             messages=[{"role": "user", "content": f"{payload.text}\n\nContext:\n{memory_context}"}],
             json_mode=True,
             max_tokens=1200,

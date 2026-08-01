@@ -25,6 +25,12 @@ function applyDocumentLang(lang: Lang) {
 
 // Called once from main.tsx before React renders, so the document direction and
 // language are correct on the very first paint (no left-to-right flash before hydration).
+/** The stored interface language, for callers outside React (the API client sends it so the
+ *  backend can generate AI prose in the language the user is actually reading). */
+export function currentLang(): Lang {
+  return readStoredLang();
+}
+
 export function applyInitialLang() {
   applyDocumentLang(readStoredLang());
 }

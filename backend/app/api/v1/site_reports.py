@@ -13,7 +13,7 @@ from fastapi import (
 )
 
 from app.agents.workflows import site_report as site_report_workflow
-from app.api.deps import DbSession
+from app.api.deps import DbSession, RequestLanguage
 from app.api.v1.import_helpers import handle_tabular_import
 from app.models import User
 from app.schemas.common import Page
@@ -82,10 +82,11 @@ async def import_site_reports(
 
 @router.post("/{project_id}/analyze", response_model=SiteReportAnalysis)
 async def analyze_site_report(
-    project_id: int, payload: SiteReportAnalyzeRequest, db: DbSession, _: SiteRoles
+    project_id: int, payload: SiteReportAnalyzeRequest, db: DbSession, _: SiteRoles,
+    language: RequestLanguage,
 ) -> SiteReportAnalysis:
     result = await site_report_workflow.run(
-        db, project_id=project_id, payload=payload, llm=get_llm()
+        db, project_id=project_id, payload=payload, llm=get_llm(), language=language
     )
     await db.commit()
     return result

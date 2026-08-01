@@ -13,7 +13,7 @@ from fastapi import (
 )
 
 from app.agents.workflows import rfi_escalation
-from app.api.deps import DbSession
+from app.api.deps import DbSession, RequestLanguage
 from app.api.v1.import_helpers import handle_tabular_import
 from app.models import User
 from app.schemas.common import Page
@@ -72,9 +72,11 @@ async def import_rfis(
 
 @router.post("/{project_id}/analyze", response_model=RfiEscalation)
 async def analyze_project_rfis(
-    project_id: int, db: DbSession, _: RfiRoles
+    project_id: int, db: DbSession, _: RfiRoles, language: RequestLanguage
 ) -> RfiEscalation:
-    result = await rfi_escalation.run(db, project_id=project_id, llm=get_llm())
+    result = await rfi_escalation.run(
+        db, project_id=project_id, llm=get_llm(), language=language
+    )
     await db.commit()
     return result
 

@@ -9,7 +9,7 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.workflows.base import gather_memory_context
+from app.agents.workflows.base import gather_memory_context, localize
 from app.models import Meeting, MeetingActionItem, ProjectDecision
 from app.schemas.memory import MemoryCategory, MemoryCreate
 from app.schemas.workflows import (
@@ -96,7 +96,8 @@ def _parse_llm(raw: str):
 
 
 async def run(
-    db: AsyncSession, *, project_id: int, payload: MeetingSummarizeRequest, llm: LLMClient
+    db: AsyncSession, *, project_id: int, payload: MeetingSummarizeRequest, llm: LLMClient,
+    language: str = "en",
 ) -> MeetingSummary:
     memory_context, memory_ids = await gather_memory_context(
         db, query=payload.notes[:300], project_id=project_id, k=3
@@ -106,7 +107,7 @@ async def run(
     if llm.provider != "mock":
         user_content = f"{payload.notes}\n\nContext:\n{memory_context}"
         result = await llm.complete(
-            system=_SUMMARIZE_PROMPT,
+            system=localize(_SUMMARIZE_PROMPT, language, json_mode=True),
             messages=[{"role": "user", "content": user_content}],
             json_mode=True,
             max_tokens=1500,

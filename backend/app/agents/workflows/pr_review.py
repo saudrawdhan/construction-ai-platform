@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.prompts import PROCUREMENT_REVIEW_AGENT
 from app.agents.workflows.base import (
     gather_memory_context,
+    language_note,
+    localize,
     parse_json_object,
     record_workflow_memory,
 )
@@ -70,7 +72,9 @@ def _template_recommendation(missing: list[str], risk: str) -> str:
     return f"Proceed through the {risk}-risk approval route; information is complete."
 
 
-async def run(db: AsyncSession, *, pr_id: int, llm: LLMClient) -> PurchaseRequestReview | None:
+async def run(
+    db: AsyncSession, *, pr_id: int, llm: LLMClient, language: str = "en"
+) -> PurchaseRequestReview | None:
     pr = await db.get(PurchaseRequest, pr_id)
     if pr is None:
         return None
@@ -108,9 +112,13 @@ async def run(db: AsyncSession, *, pr_id: int, llm: LLMClient) -> PurchaseReques
             f"Related memories:\n{memory_context}\n"
             "Return JSON with material_category, missing_information, risk_level, "
             "recommendation, required_approvals."
+            # Placed after the field list rather than only in the system prompt: that closing
+            # instruction is the last thing the model reads, and it answered in English every
+            # time while the language directive sat further back.
+            + language_note(language, json_mode=True)
         )
         result = await llm.complete(
-            system=PROCUREMENT_REVIEW_AGENT,
+            system=localize(PROCUREMENT_REVIEW_AGENT, language, json_mode=True),
             messages=[{"role": "user", "content": context}],
             json_mode=True,
             max_tokens=1024,

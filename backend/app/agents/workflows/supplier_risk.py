@@ -7,7 +7,7 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.workflows.base import clamp, gather_memory_context
+from app.agents.workflows.base import clamp, gather_memory_context, localize
 from app.models import SupplierEvaluation
 from app.schemas.memory import MemoryCategory, MemoryCreate
 from app.schemas.workflows import SupplierRiskAssessment
@@ -23,7 +23,7 @@ def _risk_level(score: float) -> str:
 
 
 async def run(
-    db: AsyncSession, *, supplier_id: int, llm: LLMClient
+    db: AsyncSession, *, supplier_id: int, llm: LLMClient, language: str = "en"
 ) -> SupplierRiskAssessment | None:
     performance = await supplier_performance(db, supplier_id)
     if performance is None:
@@ -96,7 +96,10 @@ async def run(
             "Write one concise, business-oriented risk recommendation for management."
         )
         result = await llm.complete(
-            system="You are a construction procurement risk analyst. Be concise and practical.",
+            system=localize(
+                "You are a construction procurement risk analyst. Be concise and practical.",
+                language,
+            ),
             messages=[{"role": "user", "content": context}],
             max_tokens=512,
         )

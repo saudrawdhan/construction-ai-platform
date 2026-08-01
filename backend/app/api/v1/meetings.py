@@ -13,7 +13,7 @@ from fastapi import (
 )
 
 from app.agents.workflows import meeting_summary
-from app.api.deps import DbSession
+from app.api.deps import DbSession, RequestLanguage
 from app.api.v1.import_helpers import handle_tabular_import
 from app.models import User
 from app.schemas.common import Page
@@ -81,10 +81,11 @@ async def import_meetings(
 
 @router.post("/{project_id}/summarize", response_model=MeetingSummary)
 async def summarize_meeting(
-    project_id: int, payload: MeetingSummarizeRequest, db: DbSession, _: MeetingRoles
+    project_id: int, payload: MeetingSummarizeRequest, db: DbSession, _: MeetingRoles,
+    language: RequestLanguage,
 ) -> MeetingSummary:
     result = await meeting_summary.run(
-        db, project_id=project_id, payload=payload, llm=get_llm()
+        db, project_id=project_id, payload=payload, llm=get_llm(), language=language
     )
     await db.commit()
     return result
