@@ -7,7 +7,12 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.workflows.base import clamp, gather_memory_context, localize
+from app.agents.workflows.base import (
+    clamp,
+    clean_narration,
+    gather_memory_context,
+    localize,
+)
 from app.models import SupplierEvaluation
 from app.schemas.memory import MemoryCategory, MemoryCreate
 from app.schemas.workflows import SupplierRiskAssessment
@@ -103,7 +108,7 @@ async def run(
             messages=[{"role": "user", "content": context}],
             max_tokens=512,
         )
-        recommendation = result.text.strip() or recommendation
+        recommendation = clean_narration(result.text) or recommendation
 
     evaluation = SupplierEvaluation(
         supplier_id=supplier_id,

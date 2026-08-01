@@ -5,6 +5,7 @@ decisions shape new recommendations; the returned ids are reported for source at
 """
 
 import json
+import re
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,6 +130,53 @@ def language_note(language: str, *, json_mode: bool = False) -> str:
     if (language or "en").lower() != "ar":
         return ""
     return _ARABIC_JSON if json_mode else _ARABIC_PROSE
+
+
+# A chat turn marker on its own line, or a raw chat-template token. A small local model that runs
+# past its stop token continues the transcript by writing the next speaker's turn, so everything
+# from this point on is the model talking to itself, not part of the answer.
+_TURN_BREAK = re.compile(
+    r"(?:\n|\A)\s*(?:user|assistant|system|human)\s*[:\n]|<\|[^|>]*\|>|</?s>|\[/?INST\]",
+    re.IGNORECASE,
+)
+# The platform only ever asks for English or Arabic, so a run of CJK is the model having switched
+# language mid-answer — observed live, including one Arabic escalation letter re-translated into
+# Chinese in full. Three consecutive CJK characters avoids trimming on a stray symbol.
+_SCRIPT_BREAK = re.compile(r"[　-鿿＀-￯]{3,}")
+_MIN_TRIMMED_LENGTH = 20
+
+
+def clean_narration(raw: str) -> str:
+    """Trim model output at the first point where it stops answering and starts hallucinating a
+    conversation, then return what came before.
+
+    A 7B local model intermittently runs past its stop token: measured live at roughly two in
+    twenty-five Arabic narrations, emitting a literal ``user`` turn or switching into Chinese
+    mid-sentence. Every narration site feeds its text straight to the UI *and* persists it — into
+    ``SupplierEvaluation.summary``, ``AiMemory.detail`` and the AI audit log — from where the
+    copilot later retrieves it as evidence and injects it into the next prompt. Left unfiltered,
+    one bad generation becomes permanent, reusable context.
+
+    Returns an empty string when nothing usable survives, so each caller's existing
+    ``or <deterministic fallback>`` takes over rather than a truncated fragment being stored.
+    """
+    text_value = (raw or "").strip()
+    if not text_value:
+        return ""
+    trimmed = False
+    for pattern in (_TURN_BREAK, _SCRIPT_BREAK):
+        match = pattern.search(text_value)
+        if match:
+            text_value = text_value[: match.start()].strip()
+            trimmed = True
+    if not trimmed:
+        # Nothing was wrong with it. A short answer is still an answer, and the default path must
+        # stay byte-identical to how every narration site behaved before this guard existed.
+        return text_value
+    # Only what SURVIVED a trim is held to a length floor: a handful of characters left over from
+    # cutting mid-clause is a fragment, not an answer, and storing it would be worse than falling
+    # back to the caller's own deterministic text.
+    return text_value if len(text_value) >= _MIN_TRIMMED_LENGTH else ""
 
 
 def parse_json_object(raw: str) -> dict:

@@ -306,3 +306,69 @@ def test_request_language_reads_the_header_and_falls_back_safely():
     assert request_language(None) == "en"
     assert request_language("") == "en"
     assert request_language("de") == "en"
+
+
+def test_clean_narration_keeps_a_normal_answer_untouched():
+    # The default path must not change: a well-formed answer in either language passes through
+    # exactly as the model wrote it.
+    from app.agents.workflows.base import clean_narration
+
+    english = "Supplier 5 is a medium-risk supplier. Monitor delivery performance on open orders."
+    arabic = "المورد رقم 5 متوسط المخاطر. يوصى بمتابعة أداء التسليم على الطلبات المفتوحة."
+    assert clean_narration(english) == english
+    assert clean_narration(arabic) == arabic
+    assert clean_narration(f"  {english}  ") == english
+
+
+def test_clean_narration_trims_a_hallucinated_conversation_turn():
+    # Measured live: a 7B local model runs past its stop token and continues the transcript by
+    # writing the next speaker's turn. Everything from that marker on is the model talking to
+    # itself and must never reach the UI, the audit log, or enterprise memory.
+    from app.agents.workflows.base import clean_narration
+
+    answer = "Restrict this supplier to non-critical scopes and require recovery commitments."
+    assert clean_narration(f"{answer}\nuser\nPlease continue in Arabic.") == answer
+    assert clean_narration(f"{answer}\n assistant: more text") == answer
+    assert clean_narration(f"{answer}<|im_end|><|im_start|>user") == answer
+    assert clean_narration(f"{answer}</s>[INST] again [/INST]") == answer
+
+
+def test_clean_narration_trims_a_language_breakout():
+    # The platform only ever requests English or Arabic, so a run of CJK is the model switching
+    # language mid-answer — observed live rewriting an entire Arabic escalation letter in Chinese.
+    from app.agents.workflows.base import clean_narration
+
+    arabic = "نوصي بتقييم تأثير التأخير المستمر في إجراءات الفحص المدني على الأداء العام."
+    assert clean_narration(f"{arabic}按时翻译\nuser\n请用阿拉伯语继续。") == arabic
+
+
+def test_clean_narration_does_not_trim_a_stray_fullwidth_punctuation_mark():
+    # Calibration guard. The model sometimes closes a perfectly good Arabic letter with a fullwidth
+    # comma instead of an Arabic one. That is a punctuation slip, not a language breakout, and
+    # cutting there would throw away the signature block of a correct escalation email — which is
+    # exactly what a single-character rule would have done. Only a genuine RUN of CJK counts.
+    from app.agents.workflows.base import clean_narration
+
+    letter = "شكرًا لتعاونكم في هذا الشأن العاجل.\n\nمع خالص التقدير والاحترام，\n\n[اسمك]"
+    assert clean_narration(letter) == letter
+
+
+def test_clean_narration_returns_empty_when_nothing_usable_survives():
+    # Callers fall back to their own deterministic text via `or`, so an unusable generation must
+    # yield "" rather than a truncated fragment being stored as if it were an answer.
+    from app.agents.workflows.base import clean_narration
+
+    assert clean_narration("") == ""
+    assert clean_narration("   ") == ""
+    assert clean_narration("user\nwhat now?") == ""
+
+
+def test_clean_narration_holds_only_trimmed_text_to_a_length_floor():
+    # A short answer that was never trimmed is still a valid answer — the agent's own synthesis
+    # legitimately returns brief strings, and an untouched generation must pass through unchanged.
+    # The floor exists only to stop a few characters left over from cutting mid-clause being
+    # stored as if they were the answer.
+    from app.agents.workflows.base import clean_narration
+
+    assert clean_narration("Approved.") == "Approved."
+    assert clean_narration("Yes.\nuser\nwhy?") == ""

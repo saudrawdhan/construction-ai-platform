@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.workflows.base import (
+    clean_narration,
     gather_memory_context,
     localize,
     record_workflow_memory,
@@ -85,7 +86,7 @@ async def run(
                 messages=[{"role": "user", "content": context}],
                 max_tokens=600,
             )
-            message = result.text.strip() or message
+            message = clean_narration(result.text) or message
 
     # "No overdue RFIs" is the healthy state and carries no lesson, so only a real backlog is
     # recorded. The backlog is a moving position rather than a fixed fact about a record, so a

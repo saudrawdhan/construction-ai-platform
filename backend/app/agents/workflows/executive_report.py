@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.workflows.base import localize, record_workflow_memory
+from app.agents.workflows.base import clean_narration, localize, record_workflow_memory
 from app.models import (
     AiSummary,
     Claim,
@@ -92,7 +92,7 @@ async def run(
             messages=[{"role": "user", "content": "KPIs:\n" + "\n".join(highlights)}],
             max_tokens=700,
         )
-        narrative = result.text.strip() or narrative
+        narrative = clean_narration(result.text) or narrative
 
     summary_id: int | None = None
     if payload.store:

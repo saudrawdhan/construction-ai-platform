@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.prompts import CONSTRUCTION_OPS_ASSISTANT
 from app.agents.tools import Tool, ToolContext, ToolResult, build_tool_registry
-from app.agents.workflows.base import parse_json_object
+from app.agents.workflows.base import clean_narration, parse_json_object
 from app.models import AgentRun, AgentSkill
 from app.schemas.agent import AgentRunResult, AgentStepOut
 from app.services.agent_skills import execute_skill, find_matching_skill, synthesize_skill
@@ -561,7 +561,9 @@ class ConstructionAgent:
             messages=[{"role": "user", "content": user}],
             max_tokens=600,
         )
-        return result.text.strip() or "No answer could be produced from the available evidence."
+        return clean_narration(result.text) or (
+            "No answer could be produced from the available evidence."
+        )
 
 
 # Bilingual on purpose: this platform's own retrieval layer (keyword_tsquery in tools.py)
