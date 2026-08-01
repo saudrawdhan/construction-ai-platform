@@ -157,7 +157,10 @@ Request bodies are validated by Pydantic before any handler runs, which rejects 
 a 422 automatically. The full-text query built for the copilot is constructed from alphanumeric
 tokens only, so it cannot inject into the `tsquery`. Uploaded files are size-capped at 10 MB, checked
 for an extractable text type, and rejected with a clear status code otherwise. Database integrity
-violations are caught and returned as `409 Conflict` rather than leaking a stack trace. A value that
+violations are caught rather than leaking a stack trace, and are distinguished by cause: a
+reference to a record that does not exist is answered as a `422` naming the rejected column, an
+attempt to delete a record other rows still depend on as a `409` that says so, and anything else as
+a general `409 Conflict`. A value that
 passes Pydantic but the database itself cannot store — a string longer than its column, a number out
 of range, or an invalid byte sequence, which Postgres reports as a SQLSTATE class-22 data error — is
 likewise caught and returned as a clean `422`, so oversized or malformed input never surfaces as a

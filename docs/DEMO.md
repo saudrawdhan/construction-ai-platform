@@ -55,15 +55,21 @@ memory, so the platform reuses this finding in future analysis.
 
 ## 4. The Copilot — Grounded and Honest
 
-Open **Copilot** and ask a question the record can answer, for example: *"What are the main risks and
-delays across the portfolio?"* The response carries a **Grounded** badge and lists the specific
-records it drew on.
+Open **Copilot** and name a project in the question — for example: *"What are the risks on Riyadh
+Hospital Project 3?"* The answer lists that project's risks ranked by severity with their owners and
+likelihoods, carries a **Grounded** badge, and every source chip shows
+`PRJ-0003 — Riyadh Hospital Project 3`, so it is visible at a glance that nothing was borrowed from
+another project.
 
 Then ask a question the data cannot support — a fabricated supplier name, or an unrelated topic. The
 copilot returns **No evidence found** rather than producing an answer.
 
 **Demonstrates:** the assistant answers only from retrieved evidence and explicitly declines when none
-exists; the refusal path does not call the language model at all.
+exists; the refusal path does not call the language model at all. It also shows the two grounding
+guarantees worth calling out — retrieval is **scoped** to the project named in the question, and every
+source carries the project it belongs to, so one project's records can never be narrated as another's.
+
+The same question in Arabic (*"ما هي المخاطر في مشروع 3؟"*) answers in Arabic from the same records.
 
 ## 5. The Agent — Planning, Memory, Conversation, and Skills
 

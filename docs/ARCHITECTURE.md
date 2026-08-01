@@ -43,10 +43,15 @@ Cross-cutting pieces:
 
 - `api/deps.py` and `security/deps.py` provide the `DbSession` and `CurrentUser` dependencies and the
   `require_roles(...)` guard.
-- `main.py` adds CORS, a security-headers middleware, and two database-error handlers: integrity
-  violations become clean `409 Conflict` responses, and a value the database cannot store (too long,
-  out of range, or malformed — SQLSTATE class 22) becomes a `422` instead of a raw 500, while any
-  other database error is re-raised so a genuine server fault is still surfaced and logged.
+- `main.py` adds CORS, a security-headers middleware, and two database-error handlers. Integrity
+  violations are separated by what the caller actually got wrong, because one status for all three
+  left a client unable to tell them apart: a request naming a parent row that does not exist
+  (SQLSTATE 23503, "is not present in table") answers `422` and names the rejected column, deleting
+  a record other rows still reference answers `409` saying so, and anything else — a duplicate key,
+  for instance — keeps the general `409 Conflict`. Separately, a value the database cannot store
+  (too long, out of range, or malformed — SQLSTATE class 22) becomes a `422` instead of a raw 500,
+  while any other database error is re-raised so a genuine server fault is still surfaced and
+  logged.
 - `config.py` is a single Pydantic `Settings` object read from environment variables, so the same
   code runs locally, in Docker, and in CI by changing configuration only.
 
@@ -99,9 +104,18 @@ into the same space.
 `services/retrieval.py` implements hybrid search. A query is embedded and run as a cosine
 nearest-neighbour search over `document_embeddings`; the same query text is run through Postgres
 full-text search; the two ranked lists are combined with Reciprocal Rank Fusion. Vector search finds
-semantically related passages and crosses the language boundary; full-text search nails exact tokens
-like a PO number or a change-order reference. RRF merges them without having to reconcile score
-scales. Long documents are chunked with overlap so context is not cut mid-sentence.
+semantically related passages and crosses the language boundary; full-text search nails exact
+tokens. RRF merges them without having to reconcile score scales. Long documents are chunked with
+overlap so context is not cut mid-sentence.
+
+Two honest notes on this. The exact-token half is designed to catch a reference like a PO or
+change-order number, and the query and index do match those correctly — but no chunk in the
+ingested corpus currently contains one, because what is ingested is correspondence, generated
+documents and uploads rather than the transactional records themselves. That half of the design is
+therefore correct and untested by the present data. And the score RRF produces is `1/(60 + rank)`,
+so its maximum is about 0.016 for a passage found by one retriever — a rank score, not a
+similarity. Showing it raw invited it to be read as a 1.6% match, so the Documents page displays
+the result's rank position instead, which is the only thing the number encodes.
 
 ### Memory
 
@@ -319,7 +333,7 @@ RBAC, which remains the actual authority.
 The suite runs against a real PostgreSQL instance for fidelity, but each test gets its own connection
 and an outer transaction that is rolled back at teardown; the application's own commits become
 savepoints, so nothing persists between tests. Under `TESTING` the mock LLM and hash embedder make
-everything deterministic and offline. This is why the 355-test suite can cover real database
+everything deterministic and offline. This is why the 367-test suite can cover real database
 behavior, AI workflows, and RBAC without a network call or any cleanup.
 
 ## Notable decisions

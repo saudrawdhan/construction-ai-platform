@@ -42,12 +42,15 @@ by past findings) and write to it (so findings accumulate). A memory-extraction 
 text into categorized, confidence-scored memories.
 
 **Grounded copilot.** A question-answering assistant over the memory and document corpus and the
-project registers — risks, recorded decisions, and open meeting action items — so management
-questions about unresolved actions or project risk are answered from the records themselves rather
-than only from whatever happened to be written into a document. It retrieves evidence first and
-answers only from it, and when it finds no supporting evidence it says so rather than inventing an
-answer. When a question names a project, retrieval is scoped to that project and every cited source
-carries the project it belongs to, so one project's records can never be presented as another's.
+project registers — risks, issues, recorded decisions, milestones, and open meeting action items —
+so management questions about unresolved actions or project risk are answered from the records
+themselves rather than only from whatever happened to be written into a document. It retrieves
+evidence first and answers only from it, and when it finds no supporting evidence it says so rather
+than inventing an answer. When a question names a project, retrieval is scoped to that project and
+every cited source carries the project it belongs to, so one project's records can never be
+presented as another's. Naming a register is itself a retrieval signal: asking for "the risks" on a
+project returns that project's risk register directly, because a risk record describes the risk
+without ever using the word, and keyword matching alone could never find it.
 
 **Autonomous agent.** Given a goal in plain language, the agent plans a sequence of tool calls,
 executes them, and returns a grounded answer alongside its full reasoning trajectory. It is a
@@ -266,7 +269,7 @@ A 16 GB GPU runs a 7B model comfortably; inference falls back to CPU where no GP
 ## Testing and quality
 
 ```bash
-docker compose run --rm -e TESTING=1 api pytest -q   # 355 tests, offline, deterministic
+docker compose run --rm -e TESTING=1 api pytest -q   # 367 tests, offline, deterministic
 docker compose run --rm api ruff check app scripts tests
 ```
 
