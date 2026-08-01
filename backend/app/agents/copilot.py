@@ -13,17 +13,20 @@ import re
 from dataclasses import dataclass
 
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import case, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.content_shield import shield
 from app.agents.prompts import CONSTRUCTION_OPS_ASSISTANT
+from app.agents.workflows.base import clean_narration
 from app.models import (
     AiMemory,
     DocumentEmbedding,
     MeetingActionItem,
     Project,
     ProjectDecision,
+    ProjectIssue,
+    ProjectMilestone,
     ProjectRisk,
 )
 from app.schemas.copilot import CopilotSource
@@ -127,12 +130,44 @@ async def _identify_project(db: AsyncSession, question: str) -> tuple[int, str] 
     return int(match.id), f"{match.project_code} — {match.project_name}"
 
 
+# Asking "what are the risks on this project?" is a request for a REGISTER, not for records whose
+# text happens to contain the word "risk". Keyword matching cannot serve it: the risk register
+# describes each risk ("Dewatering pump capacity below inflow rate") without ever using the word,
+# so not one of the seeded rows matches "risk" or "risks" — measured, 0 of 243. The question then
+# either refused or, worse, matched an incidental common word like "project" and answered
+# confidently from unrelated documents. Naming the register in the question is itself the retrieval
+# signal, exactly as it is for the agent's equivalent tools.
+# Each cue must NAME the register. Looser words that merely co-occur with one ("problem",
+# "outstanding", "actions") were tried and rejected: they fire on ordinary prose — an existing
+# regression test asks "Any molybdenite zephyrion problem?" purely to exercise the
+# no-records-for-this-project fallback, and a cue on "problem" turned that into a register sweep
+# that found rows and destroyed the very path the test guards.
+_REGISTER_CUES: dict[str, tuple[str, ...]] = {
+    "risk": ("risk", "risks", "risk register", "مخاطر", "المخاطر"),
+    "issue": ("issue", "issues", "issue register", "المشكلات", "مشكلات"),
+    "decision": ("decision", "decisions", "قرار", "قرارات", "القرارات"),
+    "action_item": ("action item", "action items", "بنود", "الإجراءات", "بند إجراء"),
+    "milestone": ("milestone", "milestones", "معالم", "المعالم"),
+}
+
+
+def _register_intents(question: str) -> set[str]:
+    """Which registers, if any, the question is asking about by name."""
+    low = (question or "").lower()
+    return {
+        register
+        for register, cues in _REGISTER_CUES.items()
+        if any(cue in low for cue in cues)
+    }
+
+
 async def _gather(
-    db: AsyncSession, *, tsquery: str, project_id: int | None
+    db: AsyncSession, *, tsquery: str, project_id: int | None, intents: set[str] | None = None
 ) -> list[_Evidence]:
     """Collect matching evidence from every grounded source. Memory stays first so the most
     condensed, highest-signal records lead the context window."""
     found: list[_Evidence] = []
+    intents = intents or set()
 
     memory_ids = await _match_ids(
         db, table="ai_memories", column="summary", tsquery=tsquery,
@@ -238,6 +273,139 @@ async def _gather(
                 )
             )
 
+    if intents and project_id is not None:
+        seen = {(e.kind, e.source_id) for e in found}
+        for evidence in await _register_evidence(db, intents=intents, project_id=project_id):
+            if (evidence.kind, evidence.source_id) not in seen:
+                found.append(evidence)
+
+    return found
+
+
+_SEVERITY_ORDER = case(
+    {"High": 0, "Medium": 1, "Low": 2}, value=ProjectRisk.severity, else_=3
+)
+
+
+async def _register_evidence(
+    db: AsyncSession, *, intents: set[str], project_id: int
+) -> list[_Evidence]:
+    """Read the named registers for one project directly, ranked by what a manager asks about
+    first — highest severity, still-open, most recent — rather than by keyword relevance.
+
+    Only ever runs for a scoped project: returning "the risks" across a 60-project portfolio
+    would be noise, and the brief's question is always about a project.
+    """
+    found: list[_Evidence] = []
+
+    if "risk" in intents:
+        rows = await db.scalars(
+            select(ProjectRisk)
+            .where(ProjectRisk.project_id == project_id)
+            .order_by(
+                (ProjectRisk.status == "Open").desc(), _SEVERITY_ORDER, ProjectRisk.id
+            )
+            .limit(6)
+        )
+        for risk in rows:
+            found.append(
+                _Evidence(
+                    kind="project_risk", source_id=risk.id, project_id=risk.project_id,
+                    heading=(
+                        f"RISK · {risk.severity} severity · likelihood "
+                        f"{risk.likelihood or 'unspecified'} · status {risk.status} · owner "
+                        f"{risk.owner or 'unassigned'}"
+                    ),
+                    body=f"{risk.title}. {risk.description}" if risk.description else risk.title,
+                    label=risk.title[:80],
+                )
+            )
+
+    if "issue" in intents:
+        rows = await db.scalars(
+            select(ProjectIssue)
+            .where(ProjectIssue.project_id == project_id)
+            .order_by((ProjectIssue.status == "Open").desc(), ProjectIssue.id)
+            .limit(5)
+        )
+        for issue in rows:
+            found.append(
+                _Evidence(
+                    kind="project_issue", source_id=issue.id, project_id=issue.project_id,
+                    heading=(
+                        f"ISSUE · status {issue.status} · owner {issue.owner or 'unassigned'}"
+                    ),
+                    body=(
+                        f"{issue.title}. {issue.description}"
+                        if issue.description
+                        else issue.title
+                    ),
+                    label=issue.title[:80],
+                )
+            )
+
+    if "decision" in intents:
+        rows = await db.scalars(
+            select(ProjectDecision)
+            .where(ProjectDecision.project_id == project_id)
+            .order_by(ProjectDecision.decision_date.desc(), ProjectDecision.id.desc())
+            .limit(5)
+        )
+        for decision in rows:
+            found.append(
+                _Evidence(
+                    kind="project_decision", source_id=decision.id,
+                    project_id=decision.project_id,
+                    heading=(
+                        f"DECISION · {decision.decision_date or 'undated'} · "
+                        f"owner {decision.owner}"
+                    ),
+                    body=decision.decision_text, label=decision.decision_text[:80],
+                )
+            )
+
+    if "action_item" in intents:
+        rows = await db.scalars(
+            select(MeetingActionItem)
+            .where(
+                MeetingActionItem.project_id == project_id,
+                MeetingActionItem.status != "Closed",
+            )
+            .order_by(MeetingActionItem.due_date, MeetingActionItem.id)
+            .limit(5)
+        )
+        for item in rows:
+            found.append(
+                _Evidence(
+                    kind="meeting_action_item", source_id=item.id, project_id=item.project_id,
+                    heading=(
+                        f"ACTION ITEM · status {item.status} · owner "
+                        f"{item.owner or 'unassigned'} · due {item.due_date or 'no date'}"
+                    ),
+                    body=item.description, label=item.description[:80],
+                )
+            )
+
+    if "milestone" in intents:
+        rows = await db.scalars(
+            select(ProjectMilestone)
+            .where(ProjectMilestone.project_id == project_id)
+            .order_by(ProjectMilestone.planned_date, ProjectMilestone.id)
+            .limit(8)
+        )
+        for milestone in rows:
+            found.append(
+                _Evidence(
+                    kind="project_milestone", source_id=milestone.id,
+                    project_id=milestone.project_id,
+                    heading=(
+                        f"MILESTONE · planned {milestone.planned_date} · actual "
+                        f"{milestone.actual_date or 'not achieved'} · status {milestone.status}"
+                    ),
+                    body=milestone.name, label=milestone.name[:80],
+                )
+            )
+
     return found
 
 
@@ -275,7 +443,12 @@ class ConstructionCopilot:
         else:
             scope = await _identify_project(db, question)
 
-        scoped = await _gather(db, tsquery=tsquery, project_id=scope[0]) if scope else []
+        intents = _register_intents(question)
+        scoped = (
+            await _gather(db, tsquery=tsquery, project_id=scope[0], intents=intents)
+            if scope
+            else []
+        )
         # Falling back to the whole portfolio keeps a genuinely useful answer available when the
         # named project has nothing on file, but the shortfall is stated as a computed fact and
         # every borrowed record is marked, so "no data for this project" can never be narrated
@@ -353,7 +526,7 @@ class ConstructionCopilot:
                 messages=[{"role": "user", "content": user_content}],
                 max_tokens=800,
             )
-            narration = result.text.strip() or _REFUSAL
+            narration = clean_narration(result.text) or _REFUSAL
 
         return CopilotResult(
             answer=f"{lead}\n\n{narration}" if lead else narration,

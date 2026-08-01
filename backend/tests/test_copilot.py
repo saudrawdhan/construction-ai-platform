@@ -310,3 +310,70 @@ async def test_copilot_includes_memory_detail_not_just_summary(client, admin_hea
     body = response.json()
     assert body["grounded"] is True
     assert "competitor undercut on price by fifteen percent" in body["answer"]
+
+
+def test_register_intents_recognise_the_register_by_name_in_both_languages():
+    # Naming a register in the question is the retrieval signal. Keyword matching cannot serve
+    # these questions: the seeded risk register describes each risk without ever using the word
+    # "risk", so not one of its rows matches that term.
+    from app.agents.copilot import _register_intents
+
+    assert _register_intents("What are the risks on project 3?") == {"risk"}
+    assert _register_intents("ما هي المخاطر في هذا المشروع؟") == {"risk"}
+    assert _register_intents("Which decisions were recorded?") == {"decision"}
+    assert _register_intents("ما هي القرارات المسجلة؟") == {"decision"}
+    assert _register_intents("Show unresolved action items") == {"action_item"}
+    assert _register_intents("What are the milestones?") == {"milestone"}
+    assert _register_intents("Which issues are open?") == {"issue"}
+    # A question about something else must not trigger a register sweep.
+    assert _register_intents("Who is the client for this project?") == set()
+    assert _register_intents("What is the contract value?") == set()
+
+
+async def test_copilot_answers_a_risk_register_question_with_no_keyword_match(
+    client, admin_headers, db_session
+):
+    # The exact failure this fixes: asking a project's risks returned nothing, because no risk
+    # record contains the word "risk". Regression guard — the register must be reachable by name.
+    project = Project(
+        project_code="PRJ-REG-1", project_name="Register Probe Project",
+        project_type="School", client_name="Probe", city="Riyadh", status="Delayed",
+        budget=1000000,
+    )
+    db_session.add(project)
+    await db_session.flush()
+    db_session.add(
+        ProjectRisk(
+            project_id=project.id,
+            title="Dewatering pump capacity below inflow rate",
+            description="Groundwater higher than the geotechnical report indicated.",
+            severity="High", likelihood="Medium", status="Open", owner="Eng. Probe",
+        )
+    )
+    await db_session.flush()
+
+    response = await client.post(
+        "/api/v1/ai/copilot/chat",
+        json={"question": "What are the risks on record?", "project_id": project.id},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grounded"] is True
+    kinds = {source["type"] for source in body["sources"]}
+    assert "project_risk" in kinds
+    assert any("Dewatering pump" in source["label"] for source in body["sources"])
+
+
+async def test_copilot_rejects_an_unknown_project_before_calling_the_model(
+    client, admin_headers
+):
+    # The conversation row carries a foreign key to projects, so an unknown project_id used to
+    # fail only at commit — after a full model call — and surfaced as an opaque constraint error.
+    response = await client.post(
+        "/api/v1/ai/copilot/chat",
+        json={"question": "What are the risks on record?", "project_id": 999999},
+        headers=admin_headers,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Project not found"
