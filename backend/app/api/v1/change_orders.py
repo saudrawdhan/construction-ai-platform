@@ -14,7 +14,7 @@ from fastapi import (
 
 from app.api.deps import DbSession
 from app.api.v1.import_helpers import handle_tabular_import
-from app.models import User
+from app.models import Project, User
 from app.schemas.commercial import (
     ChangeOrderCreate,
     ChangeOrderImpact,
@@ -95,6 +95,11 @@ async def project_change_order_impact(
     project_id: int, db: DbSession, _: CurrentUser
 ) -> ChangeOrderImpact:
     """Cost, programme and cause roll-up for one project's change orders."""
+    # Without this an unknown project returns a roll-up of zeros, which reads as "this project has
+    # no change orders" rather than "there is no such project" — the sibling project endpoints all
+    # answer 404, and a zeroed commercial position is the more dangerous of the two to believe.
+    if await db.get(Project, project_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Project not found")
     return await commercial_service.change_order_impact(db, project_id)
 
 

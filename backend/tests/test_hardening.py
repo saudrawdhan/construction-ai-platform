@@ -223,3 +223,33 @@ def test_an_unrecognized_environment_is_treated_as_deployed():
         _settings(environment="staging", jwt_secret=DEFAULT_JWT_SECRET)
     with pytest.raises(ValidationError):
         _settings(environment="dev", jwt_secret=DEFAULT_JWT_SECRET)
+
+
+async def test_unknown_parent_id_is_reported_as_a_bad_value_not_a_conflict(
+    client, admin_headers
+):
+    # A missing parent and a duplicate key are both IntegrityError, and answering both with the
+    # same 409 left a caller unable to tell "project 999999 does not exist" from "that number is
+    # already taken". A referenced record that is not there is a bad input value.
+    response = await client.post(
+        "/api/v1/memory/create",
+        json={
+            "category": "risk",
+            "summary": "Memory pointing at a project that does not exist.",
+            "project_id": 999999,
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "does not exist" in detail
+    assert "project_id" in detail
+
+
+async def test_change_order_impact_404s_for_an_unknown_project(client, admin_headers):
+    # A zeroed commercial roll-up for a project that does not exist reads as "this project has no
+    # change orders", which is the more dangerous of the two to believe. Every sibling project
+    # endpoint answers 404.
+    response = await client.get("/api/v1/change-orders/impact/999999", headers=admin_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Project not found"

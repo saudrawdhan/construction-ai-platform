@@ -1,3 +1,4 @@
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -57,8 +58,45 @@ async def security_headers(request: Request, call_next):
 app.include_router(api_router)
 
 
+_FOREIGN_KEY_VIOLATION = "23503"
+# Postgres names the offending column in the error's detail line. The same SQLSTATE covers two
+# opposite situations, distinguished only by that wording:
+#   writing a bad parent id -> "Key (project_id)=(999999) is not present in table ..."
+#   deleting a parent still in use -> "Key (id)=(7)  is still referenced from table ..."
+_FK_COLUMN = re.compile(r"Key \((?P<column>[^)]+)\)=")
+_STILL_REFERENCED = "is still referenced"
+
+
+def _integrity_detail(exc: IntegrityError) -> str:
+    orig = getattr(exc, "orig", None)
+    return getattr(orig, "detail", None) or str(orig) or ""
+
+
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+    # A missing parent, a still-referenced parent and a duplicate key are all IntegrityError, but
+    # they are three different client mistakes. Answering all of them with one 409 left a caller
+    # unable to tell "project 999999 does not exist" from "that RFI number is already taken" —
+    # both arrived as the same opaque sentence. Naming the case (and the column the database
+    # rejected) costs nothing and makes the API self-explaining.
+    detail = _integrity_detail(exc)
+    if getattr(getattr(exc, "orig", None), "sqlstate", None) == _FOREIGN_KEY_VIOLATION:
+        if _STILL_REFERENCED in detail:
+            # The record exists and is in use — a genuine conflict with existing state, so 409
+            # stays correct here; only the wording was unhelpful.
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "detail": "This record is still referenced by other records "
+                    "and cannot be deleted"
+                },
+            )
+        match = _FK_COLUMN.search(detail)
+        target = f" '{match.group('column')}'" if match else ""
+        return JSONResponse(
+            status_code=422,
+            content={"detail": f"Referenced record{target} does not exist"},
+        )
     return JSONResponse(
         status_code=409,
         content={"detail": "Request conflicts with an existing record or constraint"},

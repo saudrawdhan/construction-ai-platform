@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.agents.copilot import ConstructionCopilot
 from app.api.deps import DbSession
+from app.models import Project
 from app.schemas.copilot import CopilotAnswer, CopilotChatRequest
 from app.security.deps import CurrentUser
 from app.security.rate_limit import rate_limiter
@@ -20,6 +21,12 @@ router = APIRouter(prefix="/ai", tags=["ai-copilot"])
 async def copilot_chat(
     payload: CopilotChatRequest, db: DbSession, user: CurrentUser
 ) -> CopilotAnswer:
+    # Check the scope before spending a full model call on it. The conversation row this endpoint
+    # writes carries a foreign key to projects, so an unknown project_id previously failed only at
+    # commit — after the LLM had already run — and surfaced as an opaque constraint error.
+    if payload.project_id is not None and await db.get(Project, payload.project_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Project not found")
+
     copilot = ConstructionCopilot(get_llm())
     result = await copilot.answer(db, question=payload.question, project_id=payload.project_id)
 

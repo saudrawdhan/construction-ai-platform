@@ -1,3 +1,8 @@
+from sqlalchemy import select
+
+from app.models import ChangeOrder, Project
+
+
 async def test_list_change_orders_total(client, admin_headers):
     response = await client.get("/api/v1/change-orders?size=5", headers=admin_headers)
     assert response.status_code == 200
@@ -76,8 +81,25 @@ async def test_change_order_impact_rolls_up_cost_programme_and_cause(client, adm
     assert body["caused_by_rfi_count"] <= body["change_order_count"]
 
 
-async def test_change_order_impact_of_a_project_with_none_is_zeroed(client, admin_headers):
-    response = await client.get("/api/v1/change-orders/impact/999999", headers=admin_headers)
+async def test_change_order_impact_of_a_project_with_none_is_zeroed(
+    client, admin_headers, db_session
+):
+    # This used to ask for project 999999, which is not "a project with none" but a project that
+    # does not exist — and it therefore locked in a zeroed commercial roll-up as the answer for an
+    # unknown id, which reads as "this project has no change orders". The project is now looked up
+    # rather than hardcoded, so the test measures what its name says and does not depend on which
+    # ids the dataset happens to use.
+    project_id = await db_session.scalar(
+        select(Project.id)
+        .outerjoin(ChangeOrder, ChangeOrder.project_id == Project.id)
+        .where(ChangeOrder.id.is_(None))
+        .limit(1)
+    )
+    assert project_id is not None, "expected at least one project with no change orders"
+
+    response = await client.get(
+        f"/api/v1/change-orders/impact/{project_id}", headers=admin_headers
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["change_order_count"] == 0
