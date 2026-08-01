@@ -1,0 +1,79 @@
+name: CI
+
+# Runs the checks that do not depend on the operational dataset. The backend test suite is
+# deliberately absent: many of its assertions compare against exact row counts from the real
+# construction dataset (60 projects, 294 RFIs, 1200 site reports, ...), which is private and
+# git-ignored, so it cannot be reconstructed on a runner. Adding a pytest job without first
+# decoupling those assertions would produce a permanently red pipeline, which is worse than an
+# honest one. See notes/PLANNING/13_SESSION_17_BASE_FIXES.md for the decoupling proposal.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        # Pinned to the version the container uses, so CI and local runs cannot
+        # disagree about what counts as a lint error.
+        run: pipx install ruff==0.15.21
+
+      - name: Lint
+        working-directory: backend
+        run: ruff check app scripts tests
+
+  frontend:
+    name: Frontend typecheck and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  translations:
+    name: Translation parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # The Arabic dictionary must mirror the English one exactly. A missing key silently falls
+      # back to English mid-page, and a duplicate key silently overrides an earlier value — both
+      # have happened during development, and neither shows up in a normal build.
+      - name: Check en/ar dictionaries match
+        working-directory: frontend
+        run: node scripts/check-i18n.mjs
