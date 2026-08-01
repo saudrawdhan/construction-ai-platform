@@ -285,3 +285,28 @@ async def test_copilot_shields_an_injection_in_retrieved_evidence(client, admin_
     assert response.status_code == 200
     body = response.json()
     assert "UNTRUSTED CONTENT" in body["answer"]
+
+
+async def test_copilot_includes_memory_detail_not_just_summary(client, admin_headers):
+    # Full-platform audit finding: the copilot built its evidence from memory.summary only,
+    # silently discarding memory.detail on every retrieval — proven live when a stored reason for
+    # a loss never reached a grounded answer that asked for exactly that.
+    await client.post(
+        "/api/v1/memory/create",
+        json={
+            "project_id": 13,
+            "category": "procurement_blocker",
+            "summary": "Kryptonite tender was lost.",
+            "detail": "Lost because a competitor undercut on price by fifteen percent.",
+        },
+        headers=admin_headers,
+    )
+    response = await client.post(
+        "/api/v1/ai/copilot/chat",
+        json={"question": "What happened with the kryptonite tender?", "project_id": 13},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grounded"] is True
+    assert "competitor undercut on price by fifteen percent" in body["answer"]

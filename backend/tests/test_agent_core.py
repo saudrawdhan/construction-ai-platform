@@ -1628,3 +1628,19 @@ async def test_semantic_match_does_not_fire_below_the_confidence_threshold(db_se
     query_embedder = _FixedVectorEmbedder(_VEC_ORTHOGONAL)
     match = await find_matching_skill(db_session, query_embedder, "completely unrelated goal")
     assert match is None
+
+
+async def test_search_memory_tool_includes_detail_not_just_summary(db_session):
+    # Same finding as the copilot's: search_memory built its observation from memory.summary
+    # only, so the planner reported "no details available" while a concrete reason sat in the
+    # same row's detail column.
+    registry = build_tool_registry()
+    ctx = ToolContext(db=db_session, llm=get_llm(), embedder=get_embedder(), user_role="admin")
+    await registry["remember"].run(
+        ctx,
+        summary="Tender ETM-9001 for Zircon Corp was lost.",
+        detail="Lost because a competitor undercut on price by fifteen percent.",
+        category="lesson_learned",
+    )
+    result = await registry["search_memory"].run(ctx, query="Zircon Corp tender lost")
+    assert "competitor undercut on price by fifteen percent" in result.summary

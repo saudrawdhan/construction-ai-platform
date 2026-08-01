@@ -143,7 +143,13 @@ async def _gather(
             found.append(
                 _Evidence(
                     kind="memory", source_id=memory.id, project_id=memory.project_id,
-                    heading=f"MEMORY · {memory.category}", body=memory.summary,
+                    heading=f"MEMORY · {memory.category}",
+                    # Include detail, not just summary — the substantive "why" lives there when
+                    # present, and discarding it made every grounded answer blind to it (proven
+                    # live: the copilot reported a stored reason as "not available").
+                    body=(
+                        f"{memory.summary}\n{memory.detail}" if memory.detail else memory.summary
+                    ),
                     label=memory.summary[:80],
                 )
             )

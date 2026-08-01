@@ -164,7 +164,13 @@ async def _search_memory(ctx: ToolContext, query: str, project_id: int | None = 
         confidence = memory.confidence if memory.confidence is not None else "n/a"
         return f"- [{memory.category}, confidence {confidence}, {_age_desc(memory.created_at)}]"
 
-    lines = [_shield(_label(memory), memory.summary) for memory, _ in results]
+    # Include detail, not just summary — the substantive "why" lives there when present, and
+    # discarding it left the planner blind to exactly what a goal often asks for (why a decision
+    # went the way it did, not merely that it did).
+    def _memory_text(memory) -> str:
+        return f"{memory.summary}\n{memory.detail}" if memory.detail else memory.summary
+
+    lines = [_shield(_label(memory), _memory_text(memory)) for memory, _ in results]
     sources = [
         {"type": "memory", "id": memory.id, "label": memory.summary[:80]}
         for memory, _ in results
