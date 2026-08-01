@@ -16,8 +16,40 @@ from app.models import (
     ApprovalRequest,
     Notification,
     PurchaseRequest,
+    User,
 )
+from app.security.roles import Role
 from app.services.users import get_user_by_email
+
+# Mirrors the role gate on POST /approvals/{id}/approve — the people who will actually have to act
+# on the request are the people told it exists.
+_APPROVER_ROLES = (Role.ADMIN.value, Role.EXECUTIVE.value, Role.PROJECT_MANAGER.value)
+
+
+async def _notify_approvers(db: AsyncSession, approval: ApprovalRequest) -> None:
+    """Tell the approvers a request is waiting for them.
+
+    Only the requester was ever notified, and only after a decision had been made — so nothing
+    told an approver that a request existed in the first place. A high-risk action could sit
+    pending indefinitely because the one person able to release it never learned of it.
+    """
+    approvers = await db.scalars(
+        select(User).where(User.role.in_(_APPROVER_ROLES), User.is_active.is_(True))
+    )
+    for approver in approvers:
+        db.add(
+            Notification(
+                user_id=approver.id,
+                project_id=approval.project_id,
+                channel="in_app",
+                title="Approval requested",
+                body=(
+                    f"{approval.requested_by} requested approval for "
+                    f"'{approval.action_type}' ({approval.risk_level} risk)."
+                ),
+                category="approval",
+            )
+        )
 
 
 async def request_approval(
@@ -48,6 +80,7 @@ async def request_approval(
             approval_request_id=approval.id, actor=requested_by, action="requested", note=None
         )
     )
+    await _notify_approvers(db, approval)
     return approval
 
 

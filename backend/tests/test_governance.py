@@ -144,12 +144,18 @@ async def test_resolve_approval_is_atomic_against_double_resolve(db_session):
     assert len(decisions) == 1
     assert decisions[0].action == "approved"
 
-    notifications = (
+    # Counts DECISION notifications specifically: creating the request also notifies the
+    # approvers, which shares this project, so a bare project-scoped count would no longer
+    # measure what this test is about.
+    decisions_notified = (
         await db_session.scalars(
-            select(Notification).where(Notification.project_id == approval.project_id)
+            select(Notification).where(
+                Notification.project_id == approval.project_id,
+                Notification.title.in_(["Approval approved", "Approval rejected"]),
+            )
         )
     ).all()
-    assert len(notifications) == 1  # only the winner notifies the requester
+    assert len(decisions_notified) == 1  # only the winner notifies the requester
 
 
 async def _pending_pr_id(client, headers) -> int:
@@ -237,3 +243,35 @@ async def test_an_approval_whose_subject_vanished_still_resolves(client, admin_h
     )
     assert resolved.status_code == 200
     assert resolved.json()["subject_id"] == 999999
+
+
+async def test_creating_an_approval_notifies_the_approvers(client, admin_headers, db_session):
+    # Only the requester was ever notified, and only after a decision — so nothing told an
+    # approver a request existed. A high-risk action could sit pending because the person able to
+    # release it never learned of it.
+    before = await db_session.scalar(
+        select(func.count()).select_from(Notification).where(Notification.category == "approval")
+    )
+    response = await client.post(
+        "/api/v1/approvals",
+        json={
+            "action_type": "send_client_letter", "project_id": 1, "payload": {},
+            "risk_level": "high",
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 201
+    after = await db_session.scalar(
+        select(func.count()).select_from(Notification).where(Notification.category == "approval")
+    )
+    assert after > before
+
+    notification = (
+        await db_session.scalars(
+            select(Notification)
+            .where(Notification.category == "approval")
+            .order_by(Notification.id.desc())
+        )
+    ).first()
+    assert notification.title == "Approval requested"
+    assert "send_client_letter" in notification.body

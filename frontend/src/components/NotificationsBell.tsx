@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
 import { api, type Page } from "../lib/api";
 import { dateTime } from "../lib/format";
@@ -15,9 +16,22 @@ interface Notification {
 
 /**
  * Topbar bell that surfaces the in-app notifications the backend writes (approval decisions and the
- * scheduled worker's digests/alerts). Polls periodically, shows an unread count, and marks items read.
+ * scheduled worker's digests/alerts). Polls periodically, shows an unread count, marks items read,
+ * and sends the reader to the page that answers the alert.
  */
+
+/** Where each notification category is answered. An alert that tells you something needs attention
+ *  but leaves you to find it yourself is only half an alert; a category with no obvious destination
+ *  is absent here and simply marks read as before. */
+const CATEGORY_ROUTE: Record<string, string> = {
+  approval: "/approvals",
+  rfi: "/rfis",
+  procurement: "/procurement",
+  site_report: "/site-reports",
+  report: "/reports",
+};
 export default function NotificationsBell() {
+  const navigate = useNavigate();
   const t = useT();
   const [items, setItems] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
@@ -55,6 +69,17 @@ export default function NotificationsBell() {
       await api.post(`/notifications/${n.id}/read`);
     } catch {
       load(); // reconcile on failure
+    }
+  }
+
+  // Marking read and navigating are deliberately separate: the read state is recorded even when
+  // the category has no destination, and navigation does not wait on that request.
+  function openNotification(n: Notification) {
+    void markRead(n);
+    const route = n.category ? CATEGORY_ROUTE[n.category] : undefined;
+    if (route) {
+      setOpen(false);
+      navigate(route);
     }
   }
 
@@ -99,7 +124,7 @@ export default function NotificationsBell() {
               items.map((n) => (
                 <button
                   key={n.id}
-                  onClick={() => markRead(n)}
+                  onClick={() => openNotification(n)}
                   className={`flex w-full flex-col items-start gap-0.5 border-b border-slate-50 px-4 py-2.5 text-start last:border-0 hover:bg-slate-50 ${
                     n.is_read ? "" : "bg-blue-50/40"
                   }`}

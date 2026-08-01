@@ -19,8 +19,21 @@ _PENDING_PR = ("Under Review", "Pending Clarification", "Needs Rework", "Returne
 
 
 async def _notify_roles(
-    db: AsyncSession, roles: list[Role], *, title: str, body: str, project_id: int | None = None
+    db: AsyncSession,
+    roles: list[Role],
+    *,
+    title: str,
+    body: str,
+    category: str,
+    project_id: int | None = None,
 ) -> int:
+    """Notify every active holder of the given roles.
+
+    ``category`` names the area the alert is about so the notification bell can send the reader to
+    the page that answers it. Every alert previously carried the same "automation" label, which
+    left the reader knowing something happened but with nowhere to go and no way to tell an
+    overdue RFI apart from a pending purchase request.
+    """
     users = await db.scalars(
         select(User).where(
             User.role.in_([role.value for role in roles]), User.is_active.is_(True)
@@ -31,7 +44,7 @@ async def _notify_roles(
         db.add(
             Notification(
                 user_id=user.id, project_id=project_id, channel="in_app",
-                title=title, body=body, category="automation",
+                title=title, body=body, category=category,
             )
         )
         count += 1
@@ -61,7 +74,8 @@ async def daily_site_summary(db: AsyncSession) -> dict:
         )
     )
     notified = await _notify_roles(
-        db, [Role.EXECUTIVE, Role.PROJECT_MANAGER], title="Daily site digest", body=content
+        db, [Role.EXECUTIVE, Role.PROJECT_MANAGER], title="Daily site digest", body=content,
+        category="site_report",
     )
     return {
         "recent_site_reports": recent_reports,
@@ -81,7 +95,8 @@ async def overdue_rfi_reminder(db: AsyncSession) -> dict:
     if overdue:
         body = f"{overdue} RFI(s) are overdue and may be blocking execution. Please expedite."
         notified = await _notify_roles(
-            db, [Role.PROJECT_MANAGER, Role.SITE_ENGINEER], title="Overdue RFI reminder", body=body
+            db, [Role.PROJECT_MANAGER, Role.SITE_ENGINEER], title="Overdue RFI reminder",
+            body=body, category="rfi",
         )
     return {"overdue_rfis": int(overdue or 0), "notified": notified}
 
@@ -96,7 +111,8 @@ async def pending_pr_alert(db: AsyncSession) -> dict:
     if pending:
         body = f"{pending} purchase request(s) are awaiting procurement action."
         notified = await _notify_roles(
-            db, [Role.PROCUREMENT_OFFICER], title="Pending purchase requests", body=body
+            db, [Role.PROCUREMENT_OFFICER], title="Pending purchase requests", body=body,
+            category="procurement",
         )
     return {"pending_prs": int(pending or 0), "notified": notified}
 
@@ -104,7 +120,7 @@ async def pending_pr_alert(db: AsyncSession) -> dict:
 async def weekly_executive_report(db: AsyncSession, llm: LLMClient) -> dict:
     report = await executive_workflow.run(db, payload=ExecutiveReportRequest(store=True), llm=llm)
     notified = await _notify_roles(
-        db, [Role.EXECUTIVE, Role.ADMIN], title="Weekly executive report",
+        db, [Role.EXECUTIVE, Role.ADMIN], title="Weekly executive report", category="report",
         body=report.narrative[:400],
     )
     return {
