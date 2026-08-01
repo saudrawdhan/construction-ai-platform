@@ -42,6 +42,8 @@ async def create_approval(
         payload=payload.payload,
         risk_level=payload.risk_level,
         requested_by=user.email,
+        subject_type=payload.subject_type,
+        subject_id=payload.subject_id,
     )
     await db.commit()
     await db.refresh(approval)

@@ -10,7 +10,13 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AiAuditLog, ApprovalHistory, ApprovalRequest, Notification
+from app.models import (
+    AiAuditLog,
+    ApprovalHistory,
+    ApprovalRequest,
+    Notification,
+    PurchaseRequest,
+)
 from app.services.users import get_user_by_email
 
 
@@ -22,6 +28,8 @@ async def request_approval(
     payload: dict | None,
     risk_level: str,
     requested_by: str,
+    subject_type: str | None = None,
+    subject_id: int | None = None,
 ) -> ApprovalRequest:
     approval = ApprovalRequest(
         action_type=action_type,
@@ -30,6 +38,8 @@ async def request_approval(
         risk_level=risk_level,
         requested_by=requested_by,
         status="pending",
+        subject_type=subject_type,
+        subject_id=subject_id,
     )
     db.add(approval)
     await db.flush()
@@ -70,6 +80,42 @@ async def get_history(db: AsyncSession, approval_id: int) -> list[ApprovalHistor
     return list(rows)
 
 
+# What each kind of subject becomes once its approval is decided. Only records with a real,
+# unambiguous next state appear here — an approval whose subject has no defined transition (an
+# advisory recommendation, for instance) is still recorded, it simply moves nothing. Statuses are
+# the vocabulary already present in the data, not a new one invented for this table.
+_SUBJECT_TRANSITIONS: dict[str, tuple[type, dict[str, str]]] = {
+    "purchase_request": (
+        PurchaseRequest,
+        {"approved": "Approved", "rejected": "Returned to Requester"},
+    ),
+}
+
+
+async def apply_subject_transition(
+    db: AsyncSession, approval: ApprovalRequest, decision: str
+) -> str | None:
+    """Move the approved record to the state the decision implies, returning that state.
+
+    Returns None when the approval names no subject, the subject type has no defined transition,
+    or the record has since been deleted — all ordinary cases, not failures: the verdict itself is
+    already recorded either way, so a missing subject must never fail the approval.
+    """
+    entry = _SUBJECT_TRANSITIONS.get(approval.subject_type or "")
+    if entry is None or approval.subject_id is None:
+        return None
+    model, outcomes = entry
+    new_status = outcomes.get(decision)
+    if new_status is None:
+        return None
+    subject = await db.get(model, approval.subject_id)
+    if subject is None:
+        return None
+    subject.status = new_status
+    await db.flush()
+    return new_status
+
+
 async def resolve_approval(
     db: AsyncSession, approval: ApprovalRequest, *, decision: str, actor: str, note: str | None
 ) -> bool:
@@ -99,6 +145,9 @@ async def resolve_approval(
             approval_request_id=approval.id, actor=actor, action=decision, note=note
         )
     )
+    # Only the caller that actually won the pending -> decided race reaches here, so the subject
+    # can never be transitioned twice by two concurrent approvers.
+    await apply_subject_transition(db, approval, decision)
     requester = await get_user_by_email(db, approval.requested_by)
     db.add(
         Notification(

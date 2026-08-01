@@ -17,12 +17,18 @@ export default function RequestApprovalButton({
   payload,
   riskLevel = "high",
   label,
+  subjectType,
+  subjectId,
 }: {
   actionType: string;
   projectId?: number | null;
   payload: Record<string, unknown>;
   riskLevel?: string;
   label?: string;
+  /** The record this approval decides, so resolving it advances that record's own state
+   *  instead of only recording a verdict. Omitted where no single record is being decided. */
+  subjectType?: string;
+  subjectId?: number | null;
 }) {
   const t = useT();
   const { user } = useAuth();
@@ -41,6 +47,8 @@ export default function RequestApprovalButton({
         project_id: projectId ?? null,
         payload,
         risk_level: riskLevel,
+        subject_type: subjectType ?? null,
+        subject_id: subjectId ?? null,
       });
       setState("done");
     } catch (e) {

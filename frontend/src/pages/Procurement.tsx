@@ -102,6 +102,7 @@ interface Supplier {
   status: string;
 }
 interface PRReview {
+  pr_id: number;
   request_no: string;
   material_category: string | null;
   missing_information: string[];
@@ -308,6 +309,8 @@ function Requests() {
               <RequestApprovalButton
                 actionType="approve_purchase_request"
                 projectId={reviewProjectId}
+                subjectType="purchase_request"
+                subjectId={review.pr_id}
                 riskLevel={review.risk_level?.toLowerCase() === "low" ? "medium" : "high"}
                 payload={{
                   request_no: review.request_no,

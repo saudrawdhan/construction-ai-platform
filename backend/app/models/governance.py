@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,6 +15,12 @@ class ApprovalRequest(Base, TimestampMixin):
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), index=True)
     action_type: Mapped[str] = mapped_column(String(100), index=True)
     payload: Mapped[dict | None] = mapped_column(JSONB)
+    # The record this approval decides the fate of. Without it an approval is only a logged
+    # verdict: approving a purchase request left the request itself sitting untouched, so the
+    # decision never actually moved any work forward. Nullable because some approvals (an
+    # advisory risk mitigation, say) genuinely have no single record whose state should change.
+    subject_type: Mapped[str | None] = mapped_column(String(50), index=True)
+    subject_id: Mapped[int | None] = mapped_column(Integer)
     risk_level: Mapped[str] = mapped_column(String(50), index=True)
     requested_by: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(50), default="pending", index=True)

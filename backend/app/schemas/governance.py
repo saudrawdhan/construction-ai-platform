@@ -8,6 +8,10 @@ class ApprovalCreate(BaseModel):
     project_id: int | None = None
     payload: dict | None = None
     risk_level: str = "high"
+    # The record this approval decides, so resolving it can move that record's own state rather
+    # than only logging a verdict. Optional: not every approval has one.
+    subject_type: str | None = None
+    subject_id: int | None = None
 
 
 class ApprovalDecision(BaseModel):
@@ -27,6 +31,8 @@ class ApprovalRead(BaseModel):
     resolved_by: str | None
     resolved_at: datetime | None
     created_at: datetime
+    subject_type: str | None = None
+    subject_id: int | None = None
 
 
 class ApprovalHistoryRead(BaseModel):

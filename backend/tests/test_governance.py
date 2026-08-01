@@ -150,3 +150,90 @@ async def test_resolve_approval_is_atomic_against_double_resolve(db_session):
         )
     ).all()
     assert len(notifications) == 1  # only the winner notifies the requester
+
+
+async def _pending_pr_id(client, headers) -> int:
+    response = await client.get(
+        "/api/v1/procurement/purchase-requests?size=1&status=Under Review", headers=headers
+    )
+    return response.json()["items"][0]["id"]
+
+
+async def test_approving_moves_the_purchase_request_to_approved(
+    client, admin_headers, db_session
+):
+    # An approval used to be only a logged verdict: the request it decided sat untouched, so the
+    # decision never moved any work forward.
+    pr_id = await _pending_pr_id(client, admin_headers)
+    created = await client.post(
+        "/api/v1/approvals",
+        json={
+            "action_type": "approve_purchase_request", "project_id": 1, "payload": {},
+            "risk_level": "high", "subject_type": "purchase_request", "subject_id": pr_id,
+        },
+        headers=admin_headers,
+    )
+    assert created.status_code == 201
+    approval_id = created.json()["id"]
+
+    resolved = await client.post(
+        f"/api/v1/approvals/{approval_id}/approve", json={}, headers=admin_headers
+    )
+    assert resolved.status_code == 200
+
+    pr = await client.get(f"/api/v1/procurement/purchase-requests/{pr_id}", headers=admin_headers)
+    assert pr.json()["status"] == "Approved"
+
+
+async def test_rejecting_returns_the_purchase_request_to_its_requester(
+    client, admin_headers
+):
+    pr_id = await _pending_pr_id(client, admin_headers)
+    created = await client.post(
+        "/api/v1/approvals",
+        json={
+            "action_type": "approve_purchase_request", "project_id": 1, "payload": {},
+            "risk_level": "high", "subject_type": "purchase_request", "subject_id": pr_id,
+        },
+        headers=admin_headers,
+    )
+    approval_id = created.json()["id"]
+    await client.post(f"/api/v1/approvals/{approval_id}/reject", json={}, headers=admin_headers)
+
+    pr = await client.get(f"/api/v1/procurement/purchase-requests/{pr_id}", headers=admin_headers)
+    assert pr.json()["status"] == "Returned to Requester"
+
+
+async def test_an_approval_without_a_subject_still_resolves(client, admin_headers):
+    # Advisory approvals genuinely have no single record to move; they must still resolve cleanly
+    # rather than failing because there is nothing to transition.
+    created = await client.post(
+        "/api/v1/approvals",
+        json={"action_type": "supplier_risk_mitigation", "payload": {}, "risk_level": "medium"},
+        headers=admin_headers,
+    )
+    approval_id = created.json()["id"]
+    resolved = await client.post(
+        f"/api/v1/approvals/{approval_id}/approve", json={}, headers=admin_headers
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["status"] == "approved"
+
+
+async def test_an_approval_whose_subject_vanished_still_resolves(client, admin_headers):
+    # The verdict is already recorded by the time the transition runs, so a deleted or unknown
+    # subject must never turn a valid approval into an error.
+    created = await client.post(
+        "/api/v1/approvals",
+        json={
+            "action_type": "approve_purchase_request", "payload": {}, "risk_level": "high",
+            "subject_type": "purchase_request", "subject_id": 999999,
+        },
+        headers=admin_headers,
+    )
+    approval_id = created.json()["id"]
+    resolved = await client.post(
+        f"/api/v1/approvals/{approval_id}/approve", json={}, headers=admin_headers
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["subject_id"] == 999999
