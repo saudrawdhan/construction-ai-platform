@@ -41,14 +41,19 @@ performance, and more, with source attribution. Workflows both read from it (so 
 by past findings) and write to it (so findings accumulate). A memory-extraction agent turns free
 text into categorized, confidence-scored memories.
 
-**Grounded copilot.** A question-answering assistant over the memory and document corpus. It
-retrieves evidence first and answers only from it — and when it finds no supporting evidence, it
-says so rather than inventing an answer.
+**Grounded copilot.** A question-answering assistant over the memory and document corpus and the
+project registers — risks, recorded decisions, and open meeting action items — so management
+questions about unresolved actions or project risk are answered from the records themselves rather
+than only from whatever happened to be written into a document. It retrieves evidence first and
+answers only from it, and when it finds no supporting evidence it says so rather than inventing an
+answer. When a question names a project, retrieval is scoped to that project and every cited source
+carries the project it belongs to, so one project's records can never be presented as another's.
 
 **Autonomous agent.** Given a goal in plain language, the agent plans a sequence of tool calls,
 executes them, and returns a grounded answer alongside its full reasoning trajectory. It is a
 single reasoning layer, not six separate mini-agents: its tool set spans all six AI workflows plus
-retrieval and direct lookups over projects, claims, change orders, and safety events, so the same
+retrieval and direct lookups over projects, claims, change orders, safety events, project risks,
+and open action items, so the same
 agent that assesses a supplier's risk can also summarize a meeting, analyze a site report, or total
 a project's open claims. A direct question naming one of these read-only lookups is guaranteed to
 call it — the same principle that already guarantees an explicit `remember` instruction fires —
@@ -112,8 +117,17 @@ can adopt it and run its own operation:
   dataset.
 - **User management** (admin) with a self-lockout guard, **in-app notifications** (a top-bar bell fed
   by approval outcomes and the scheduled worker), a **project workspace** that gathers a project's
-  RFIs, orders, meetings, and reports, and an **adaptive dashboard** that onboards a first-time,
-  empty install instead of showing a wall of zeros.
+  risk register, issues, decisions, milestones, RFIs, orders, meetings, and reports, and an
+  **adaptive dashboard** that onboards a first-time, empty install instead of showing a wall of
+  zeros.
+- **Governance that moves work forward** — approving a request applies the decision to the record it
+  was about (a purchase request becomes Approved, a rejected one returns to its requester) rather
+  than only logging a verdict.
+- **Change-order traceability** — every change order records what caused it (optionally the RFI that
+  triggered it) and what it costs the programme in days, with a per-project roll-up of cost, time,
+  and cause.
+- **Bilingual output, not just a bilingual interface** — the six AI workflows generate their prose in
+  the language the interface is set to, and the copilot answers in the language of the question.
 
 ## Architecture at a glance
 
@@ -252,7 +266,7 @@ A 16 GB GPU runs a 7B model comfortably; inference falls back to CPU where no GP
 ## Testing and quality
 
 ```bash
-docker compose run --rm -e TESTING=1 api pytest -q   # 301 tests, offline, deterministic
+docker compose run --rm -e TESTING=1 api pytest -q   # 355 tests, offline, deterministic
 docker compose run --rm api ruff check app scripts tests
 ```
 

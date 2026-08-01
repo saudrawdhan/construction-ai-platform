@@ -131,13 +131,23 @@ through the approval gate.
 
 ### Copilot
 
-The copilot (`agents/copilot.py`) answers questions over memory and the document corpus. The hard
-part is refusing gracefully when there is no evidence, because pure vector search always returns a
-nearest neighbour and so can never say "I don't know". The solution is to gate grounding on keyword
-matching: substantive terms are extracted from the question (stopwords dropped, Arabic preserved) and
-run as a full-text query; if nothing matches, the copilot refuses without calling the LLM at all.
-When there is evidence, it is passed to the LLM under a system prompt that also instructs it to flag
-anything the evidence does not cover.
+The copilot (`agents/copilot.py`) answers questions over memory, the document corpus, and the
+project registers — risks, recorded decisions, and open meeting action items. The hard part is
+refusing gracefully when there is no evidence, because pure vector search always returns a nearest
+neighbour and so can never say "I don't know". The solution is to gate grounding on keyword matching:
+substantive terms are extracted from the question (stopwords dropped, Arabic preserved) and run as a
+full-text query; if nothing matches, the copilot refuses without calling the LLM at all. When there
+is evidence, it is passed to the LLM under a system prompt that also instructs it to flag anything
+the evidence does not cover.
+
+Two properties matter for trust. **Retrieval is project-scoped**: when a question names a project,
+only that project's records are retrieved, and if it names none the query stays portfolio-wide.
+**Every piece of evidence carries the project it belongs to**, structurally rather than by
+instruction — a live test found the model narrating three other projects' records as if they were
+the one asked about, which scoping alone would not have prevented. When a named project genuinely has
+no matching record, the shortfall is stated as a computed fact and any related evidence borrowed from
+elsewhere is explicitly marked as belonging to another project. The answer is written in the language
+of the question.
 
 ### Agent
 
@@ -309,7 +319,7 @@ RBAC, which remains the actual authority.
 The suite runs against a real PostgreSQL instance for fidelity, but each test gets its own connection
 and an outer transaction that is rolled back at teardown; the application's own commits become
 savepoints, so nothing persists between tests. Under `TESTING` the mock LLM and hash embedder make
-everything deterministic and offline. This is why the 301-test suite can cover real database
+everything deterministic and offline. This is why the 355-test suite can cover real database
 behavior, AI workflows, and RBAC without a network call or any cleanup.
 
 ## Notable decisions
