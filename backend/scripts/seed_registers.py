@@ -1,5 +1,5 @@
 """Deterministic seeder for the project registers the source dataset does not carry: risks,
-issues, milestones, and meeting action items.
+issues, milestones, meeting action items, and change-order cause/impact.
 
 The tables were migrated from the start but never populated, so every project's Risk Register
 rendered empty and the copilot's "unresolved action items" had nothing to answer from — a feature
@@ -18,12 +18,14 @@ from sqlalchemy import func, select, text
 
 from app.database.session import AsyncSessionLocal, engine
 from app.models import (
+    ChangeOrder,
     Meeting,
     MeetingActionItem,
     Project,
     ProjectIssue,
     ProjectMilestone,
     ProjectRisk,
+    Rfi,
 )
 
 RNG = random.Random(42)
@@ -136,6 +138,17 @@ ACTIONS = [
     ("Provide the cost impact assessment for the scope change", "Commercial Manager"),
     ("Update the site safety induction records", "HSE Officer"),
     ("Reconcile the blockwork measurement with the subcontractor", "Quantity Surveyor"),
+]
+
+# Why change orders happen on a real site, weighted so design changes and client instructions
+# dominate the way they do in practice rather than being spread evenly.
+CO_CAUSES = [
+    ("design_change", "Revised design issued after coordination review.", 12),
+    ("client_instruction", "Client instructed an upgrade to the specified finish.", 10),
+    ("site_condition", "Unforeseen ground condition encountered during excavation.", 20),
+    ("regulatory", "Authority required an additional life-safety provision.", 15),
+    ("error_or_omission", "Missing scope identified in the tender documents.", 8),
+    ("other", "Scope adjustment agreed in the monthly progress meeting.", 5),
 ]
 
 RISK_STATUSES = ["Open", "Open", "Open", "Mitigated", "Closed"]
@@ -256,6 +269,32 @@ def build_action_items(meetings: list[Meeting]) -> list[dict]:
     return rows
 
 
+def build_change_order_updates(
+    change_orders: list[ChangeOrder], rfis_by_project: dict[int, list[int]]
+) -> list[dict]:
+    """Attach a cause and a programme impact to every change order.
+
+    Roughly half are linked to the RFI that triggered them, which is the realistic pattern: a
+    change often begins as a question about the design, but plenty originate on site or by direct
+    instruction and have no RFI behind them at all.
+    """
+    updates = []
+    for change_order in change_orders:
+        category, description, max_days = RNG.choice(CO_CAUSES)
+        candidates = rfis_by_project.get(change_order.project_id, [])
+        link_rfi = category in ("design_change", "error_or_omission") and bool(candidates)
+        updates.append(
+            {
+                "co_id": change_order.id,
+                "cause_category": category,
+                "cause_description": description,
+                "schedule_impact_days": RNG.randint(0, max_days),
+                "cause_rfi_id": RNG.choice(candidates) if link_rfi else None,
+            }
+        )
+    return updates
+
+
 async def run() -> None:
     async with AsyncSessionLocal() as session:
         projects = list((await session.scalars(select(Project).order_by(Project.id))).all())
@@ -275,6 +314,19 @@ async def run() -> None:
         await session.execute(ProjectIssue.__table__.insert(), build_issues(projects))
         await session.execute(ProjectMilestone.__table__.insert(), build_milestones(projects))
         await session.execute(MeetingActionItem.__table__.insert(), build_action_items(meetings))
+
+        # Change orders already exist; only their cause and programme impact are added, so this
+        # updates in place rather than truncating real commercial records.
+        change_orders = list((await session.scalars(select(ChangeOrder))).all())
+        rfis_by_project: dict[int, list[int]] = {}
+        for rfi_id, rfi_project in await session.execute(select(Rfi.id, Rfi.project_id)):
+            rfis_by_project.setdefault(rfi_project, []).append(rfi_id)
+        for update in build_change_order_updates(change_orders, rfis_by_project):
+            await session.execute(
+                ChangeOrder.__table__.update()
+                .where(ChangeOrder.id == update.pop("co_id"))
+                .values(**update)
+            )
         await session.commit()
 
         async def _count(model, *where) -> int:
@@ -294,12 +346,15 @@ async def run() -> None:
             MeetingActionItem.status == "Open",
             MeetingActionItem.due_date < TODAY,
         )
+        co_total = await _count(ChangeOrder, ChangeOrder.cause_category.is_not(None))
+        co_linked = await _count(ChangeOrder, ChangeOrder.cause_rfi_id.is_not(None))
 
     print(f"projects seeded against : {len(projects)}")
     print(f"project_risks           : {risks} ({open_risks} open)")
     print(f"project_issues          : {issues}")
     print(f"project_milestones      : {milestones} ({delayed} delayed)")
     print(f"meeting_action_items    : {actions} ({overdue} open and overdue)")
+    print(f"change_orders enriched  : {co_total} ({co_linked} linked to a causing RFI)")
 
     await engine.dispose()
 

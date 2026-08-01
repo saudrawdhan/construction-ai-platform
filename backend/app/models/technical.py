@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -33,6 +33,14 @@ class ChangeOrder(Base):
     description: Mapped[str] = mapped_column(Text)
     value: Mapped[float] = mapped_column(Numeric(16, 2))
     status: Mapped[str] = mapped_column(String(50), index=True)
+    # What triggered the change and what it costs in time. `value` already carries the cost
+    # impact; without these a change order records only that something changed, leaving no way
+    # to answer who caused it or what it did to the programme — the two questions a commercial
+    # claim ultimately rests on.
+    cause_rfi_id: Mapped[int | None] = mapped_column(ForeignKey("rfis.id"), index=True)
+    cause_category: Mapped[str | None] = mapped_column(String(50), index=True)
+    cause_description: Mapped[str | None] = mapped_column(Text)
+    schedule_impact_days: Mapped[int | None] = mapped_column(Integer)
 
 
 class Ncr(Base):

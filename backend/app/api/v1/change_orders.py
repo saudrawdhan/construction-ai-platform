@@ -15,7 +15,12 @@ from fastapi import (
 from app.api.deps import DbSession
 from app.api.v1.import_helpers import handle_tabular_import
 from app.models import User
-from app.schemas.commercial import ChangeOrderCreate, ChangeOrderRead, ChangeOrderUpdate
+from app.schemas.commercial import (
+    ChangeOrderCreate,
+    ChangeOrderImpact,
+    ChangeOrderRead,
+    ChangeOrderUpdate,
+)
 from app.schemas.common import Page
 from app.schemas.imports import ImportReport
 from app.security.deps import CurrentUser, require_roles
@@ -83,6 +88,14 @@ async def list_change_orders(
         db, page=page, size=size, project_id=project_id, status=status
     )
     return Page.build([ChangeOrderRead.model_validate(c) for c in items], total, page, size)
+
+
+@router.get("/impact/{project_id}", response_model=ChangeOrderImpact)
+async def project_change_order_impact(
+    project_id: int, db: DbSession, _: CurrentUser
+) -> ChangeOrderImpact:
+    """Cost, programme and cause roll-up for one project's change orders."""
+    return await commercial_service.change_order_impact(db, project_id)
 
 
 @router.get("/{co_id}", response_model=ChangeOrderRead)

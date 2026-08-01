@@ -3,6 +3,17 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Why the change happened. Free text alone would make the portfolio unanalysable, so a small
+# fixed vocabulary carries the cause and the description explains the specific instance.
+CAUSE_CATEGORIES = (
+    "design_change",
+    "client_instruction",
+    "site_condition",
+    "regulatory",
+    "error_or_omission",
+    "other",
+)
+
 
 class ChangeOrderCreate(BaseModel):
     project_id: int
@@ -10,6 +21,10 @@ class ChangeOrderCreate(BaseModel):
     description: str = Field(min_length=1)
     value: Decimal
     status: str = "Pending"
+    cause_rfi_id: int | None = None
+    cause_category: str | None = None
+    cause_description: str | None = None
+    schedule_impact_days: int | None = None
 
 
 class ChangeOrderUpdate(BaseModel):
@@ -17,6 +32,10 @@ class ChangeOrderUpdate(BaseModel):
     description: str | None = Field(default=None, min_length=1)
     value: Decimal | None = None
     status: str | None = None
+    cause_rfi_id: int | None = None
+    cause_category: str | None = None
+    cause_description: str | None = None
+    schedule_impact_days: int | None = None
 
 
 class ClaimCreate(BaseModel):
@@ -45,6 +64,26 @@ class ChangeOrderRead(BaseModel):
     description: str
     value: Decimal
     status: str
+    cause_rfi_id: int | None = None
+    cause_category: str | None = None
+    cause_description: str | None = None
+    schedule_impact_days: int | None = None
+
+
+class ChangeOrderImpact(BaseModel):
+    """What a project's change orders have done to its cost and programme, and what drove them.
+
+    The brief asks a change order to connect to its cause and estimate impact; per change order
+    that is a row, but the question a project manager actually asks is the total — so the roll-up
+    is computed here rather than left to the reader to add up."""
+
+    project_id: int
+    change_order_count: int
+    total_value: Decimal
+    approved_value: Decimal
+    total_schedule_impact_days: int
+    by_cause: dict[str, int]
+    caused_by_rfi_count: int
 
 
 class ClaimRead(BaseModel):

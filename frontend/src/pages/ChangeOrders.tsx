@@ -33,7 +33,26 @@ const changeOrderFields = (t: Translate) => [
     initial: "Pending",
   },
   { name: "value", label: t("field.valueSar"), type: "number" as const, required: true },
+  {
+    name: "cause_category",
+    label: t("field.cause"),
+    type: "select" as const,
+    options: CAUSE_CATEGORIES,
+  },
+  { name: "schedule_impact_days", label: t("field.scheduleImpact"), type: "number" as const },
   { name: "description", label: t("field.description"), type: "textarea" as const, required: true },
+  { name: "cause_description", label: t("field.causeDetail"), type: "textarea" as const },
+];
+
+// Mirrors CAUSE_CATEGORIES in the backend schema; a change order with no recorded cause is the
+// state the platform is trying to move away from, so the field is offered on every form.
+const CAUSE_CATEGORIES = [
+  "design_change",
+  "client_instruction",
+  "site_condition",
+  "regulatory",
+  "error_or_omission",
+  "other",
 ];
 
 const STATUSES = ["Pending", "Under Review", "Approved", "Rejected"];
@@ -45,6 +64,10 @@ interface ChangeOrder {
   description: string;
   value: string;
   status: string;
+  cause_category: string | null;
+  cause_description: string | null;
+  cause_rfi_id: number | null;
+  schedule_impact_days: number | null;
 }
 
 export default function ChangeOrders() {
@@ -107,14 +130,41 @@ export default function ChangeOrders() {
 
       {data && (
         <Card>
-          <Table head={[t("col.changeOrder"), t("col.description"), t("col.value"), t("col.status"), ""]}>
+          <Table
+            head={[
+              t("col.changeOrder"),
+              t("col.description"),
+              t("field.cause"),
+              t("col.value"),
+              t("field.scheduleImpact"),
+              t("col.status"),
+              "",
+            ]}
+          >
             {data.items.map((co) => (
               <tr key={co.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{co.co_number}</td>
                 <td className="max-w-md px-4 py-3 text-slate-700">
                   <div className="truncate">{co.description}</div>
                 </td>
+                <td className="px-4 py-3">
+                  {co.cause_category ? (
+                    <div className="flex flex-col gap-0.5">
+                      <Badge tone="slate">{enumLabel(co.cause_category, t)}</Badge>
+                      {co.cause_rfi_id && (
+                        <span className="text-xs text-slate-400">
+                          {t("co.causedByRfi", { n: co.cause_rfi_id })}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 font-medium text-slate-800">{money(co.value)}</td>
+                <td className="px-4 py-3 text-slate-700">
+                  {co.schedule_impact_days ? t("co.days", { n: co.schedule_impact_days }) : "—"}
+                </td>
                 <td className="px-4 py-3">
                   <Badge tone={statusTone(co.status)}>{enumLabel(co.status, t)}</Badge>
                 </td>

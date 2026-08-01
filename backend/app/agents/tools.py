@@ -382,16 +382,27 @@ async def _get_change_orders(ctx: ToolContext, project_id: int) -> ToolResult:
     for c in rows:
         by_status[c.status] = by_status.get(c.status, 0) + 1
     status_line = ", ".join(f"{count} {status}" for status, count in by_status.items())
+    # Cause and programme impact are what turn a list of change orders into a commercial
+    # position; reporting only the money answers half the question the brief asks.
+    schedule_days = sum(c.schedule_impact_days or 0 for c in rows)
     lines = [
-        f"- {c.co_number}: SAR {float(c.value):,.0f}, status {c.status}" for c in rows
+        f"- {c.co_number}: SAR {float(c.value):,.0f}, status {c.status}, cause "
+        f"{c.cause_category or 'unspecified'}"
+        + (f", +{c.schedule_impact_days}d" if c.schedule_impact_days else "")
+        + (f", caused by RFI #{c.cause_rfi_id}" if c.cause_rfi_id else "")
+        for c in rows
     ]
     summary = (
         f"Project {project_id} has {len(rows)} change order(s) totaling SAR {total:,.0f} "
-        f"({status_line}).\n" + "\n".join(lines)
+        f"({status_line}), with {schedule_days} day(s) of programme impact.\n" + "\n".join(lines)
     )
     return ToolResult(
         summary=summary,
-        data={"count": len(rows), "total_value": total},
+        data={
+            "count": len(rows),
+            "total_value": total,
+            "total_schedule_impact_days": schedule_days,
+        },
         sources=[{"type": "change_order", "id": c.id, "label": c.co_number} for c in rows],
     )
 

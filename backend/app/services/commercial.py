@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +13,7 @@ from app.models import (
 )
 from app.schemas.commercial import (
     ChangeOrderCreate,
+    ChangeOrderImpact,
     ChangeOrderRead,
     ChangeOrderUpdate,
     ClaimCreate,
@@ -76,6 +79,33 @@ async def delete_claim(db: AsyncSession, claim_id: int) -> bool:
     await db.delete(claim)
     await db.flush()
     return True
+
+
+async def change_order_impact(db: AsyncSession, project_id: int) -> ChangeOrderImpact:
+    """Aggregate a project's change orders into cost, programme, and cause.
+
+    Every figure is computed here rather than narrated, so the numbers a commercial discussion
+    turns on cannot be distorted by a model. Approved value is reported separately from total
+    because an unapproved change order is a claim position, not yet a cost.
+    """
+    rows = list(
+        await db.scalars(select(ChangeOrder).where(ChangeOrder.project_id == project_id))
+    )
+    by_cause: dict[str, int] = {}
+    for row in rows:
+        key = row.cause_category or "unspecified"
+        by_cause[key] = by_cause.get(key, 0) + 1
+    return ChangeOrderImpact(
+        project_id=project_id,
+        change_order_count=len(rows),
+        total_value=sum((Decimal(str(r.value)) for r in rows), Decimal("0")),
+        approved_value=sum(
+            (Decimal(str(r.value)) for r in rows if r.status == "Approved"), Decimal("0")
+        ),
+        total_schedule_impact_days=sum(r.schedule_impact_days or 0 for r in rows),
+        by_cause=dict(sorted(by_cause.items(), key=lambda item: (-item[1], item[0]))),
+        caused_by_rfi_count=sum(1 for r in rows if r.cause_rfi_id is not None),
+    )
 
 
 async def list_change_orders(
