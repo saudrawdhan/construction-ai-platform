@@ -40,7 +40,7 @@ ProjectManagers = Annotated[User, Depends(require_roles(Role.ADMIN, Role.PROJECT
 PROJECT_TEMPLATE = (
     "project_code,project_name,project_type,client_name,city,status,"
     "start_date,planned_finish,budget\n"
-    "PRJ-0100,Riyadh Office Tower,Tower,Aramco,Riyadh,Active,"
+    "PRJ-0100,Riyadh Office Tower,Tower,Gulf Energy Holdings,Riyadh,Active,"
     "2026-01-15,2027-06-30,250000000\n"
 )
 

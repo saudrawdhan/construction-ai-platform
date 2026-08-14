@@ -30,7 +30,7 @@ from app.security.roles import Role
 from app.services import procurement as procurement_service
 from app.services.llm import get_llm
 
-SUPPLIER_TEMPLATE = "supplier_name,category,city,status\nAl-Rajhi Steel,Steel,Riyadh,Active\n"
+SUPPLIER_TEMPLATE = "supplier_name,category,city,status\nFalcon Steel Works,Steel,Riyadh,Active\n"
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 

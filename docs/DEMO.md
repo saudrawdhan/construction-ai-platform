@@ -160,7 +160,7 @@ a schedule, and always in a mode that uses no API quota.
 
 ## Closing
 
-Every scenario above draws on one integrated system — running on the real dataset or on synthetic
-demo data: reading the operational record, analyzing it, retaining what was learned, answering
+Every scenario above draws on one integrated system — running on a private operational dataset or on
+synthetic demo data: reading the operational record, analyzing it, retaining what was learned, answering
 questions from evidence, keeping high-risk actions behind a person, and letting a company enter and
 manage its own data — the combination the platform is designed to deliver.

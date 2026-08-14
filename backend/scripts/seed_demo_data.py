@@ -49,26 +49,33 @@ DEMO_USERS = [
 ]
 
 CITIES = ["Riyadh", "Jeddah", "Dammam", "Khobar", "Makkah", "Madinah", "Tabuk", "Jubail"]
-CLIENTS = ["Aramco", "Royal Commission", "Ministry of Health", "NEOM", "Roshn", "Dar Al-Riyadh"]
+CLIENTS = [
+    "Gulf Energy Holdings",
+    "Coastal Development Authority",
+    "National Health Directorate",
+    "Vision Coastal City",
+    "Horizon Residential Group",
+    "Capital Design Partners",
+]
 DISCIPLINES = ["Structural", "Architectural", "MEP", "Civil", "Electrical"]
 MATERIALS = ["Steel", "Concrete", "MEP", "Electrical", "Facade", "Finishing"]
 MEETING_TYPES = ["Progress Review", "Technical Coordination", "Safety Review", "Client Meeting"]
 WEATHER = ["Clear", "Hot", "Dusty", "Humid"]
 
 SUPPLIERS = [
-    "Al-Rajhi Steel", "Saudi Readymix", "Zamil Industrial", "Al-Babtain Contracting",
-    "Rawabi Electric", "Nesma MEP", "Al-Muhaidib Supplies", "Alfanar Electric",
-    "Al-Yamama Cement", "Descon Engineering",
+    "Falcon Steel Works", "Desert Readymix", "Meridian Industrial", "Cedar Contracting",
+    "Oasis Electric", "Summit MEP", "Pearl Building Supplies", "Lantern Electric",
+    "Highland Cement", "Anchor Engineering",
 ]
 
 PROJECTS = [
-    ("Riyadh Financial District Tower", "Tower"),
-    ("King Faisal Hospital Extension", "Hospital"),
+    ("Riyadh Commercial Tower", "Tower"),
+    ("Central Hospital Extension", "Hospital"),
     ("Jeddah Waterfront Residences", "Residential"),
     ("Dammam Industrial Warehouse Complex", "Warehouse"),
-    ("Makkah Metro Station Package 3", "Infrastructure"),
-    ("Madinah Knowledge School Campus", "School"),
-    ("NEOM Coastal Access Road", "Infrastructure"),
+    ("Makkah Transit Station Package 3", "Infrastructure"),
+    ("Madinah Community School Campus", "School"),
+    ("Northern Coastal Access Road", "Infrastructure"),
     ("Khobar Corniche Residential Towers", "Residential"),
 ]
 

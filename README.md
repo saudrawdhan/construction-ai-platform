@@ -202,8 +202,9 @@ with a realistic fake portfolio and the seven role accounts:
 docker compose run --rm api python -m scripts.seed_demo_data       # deterministic demo portfolio
 ```
 
-**Option B — the real dataset.** The demonstration dataset is real construction data and is not
-included in this repository. With a dataset present under `data/`, the loader scripts populate it:
+**Option B — an operational dataset.** The platform was developed against a private operational
+dataset, which is not included in this repository. With a dataset present under `data/`, the loader
+scripts populate it:
 
 ```bash
 docker compose run --rm api python -m scripts.import_dataset       # ETL from the source dump

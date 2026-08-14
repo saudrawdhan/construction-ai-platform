@@ -333,7 +333,7 @@ RBAC, which remains the actual authority.
 The suite runs against a real PostgreSQL instance for fidelity, but each test gets its own connection
 and an outer transaction that is rolled back at teardown; the application's own commits become
 savepoints, so nothing persists between tests. Under `TESTING` the mock LLM and hash embedder make
-everything deterministic and offline. This is why the 367-test suite can cover real database
+everything deterministic and offline. This is why the 368-test suite can cover real database
 behavior, AI workflows, and RBAC without a network call or any cleanup.
 
 ## Notable decisions

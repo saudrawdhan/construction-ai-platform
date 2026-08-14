@@ -133,7 +133,7 @@ async def test_viewer_cannot_import(client, viewer_headers):
 async def test_import_projects_csv(client, admin_headers):
     csv_data = (
         b"project_code,project_name,project_type,client_name,city,status,budget\n"
-        b"PRJ-9001,Test Tower,Tower,Aramco,Riyadh,Active,100000000\n"
+        b"PRJ-9001,Test Tower,Tower,Gulf Energy Holdings,Riyadh,Active,100000000\n"
         b"PRJ-9002,Test School,School,Ministry,Jeddah,Active,50000000\n"
     )
     response = await client.post(
