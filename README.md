@@ -7,12 +7,12 @@ spreadsheet until a project is already late; a claim goes to arbitration and nob
 assemble the change orders, correspondence, and decisions that support it.
 
 This platform turns that paperwork into something you can query, summarize, and act on. It ingests
-real project data, keeps an organizational memory of what was decided and why, runs AI workflows
+project data, keeps an organizational memory of what was decided and why, runs AI workflows
 over the operational record, and answers management's questions — with every AI answer tied back to
 the records it came from, and every high-risk action held behind a human approval.
 
 It is built to be run, not just demonstrated: a FastAPI backend, a PostgreSQL/pgvector database that
-loads real bilingual (English/Arabic) construction data — or realistic synthetic demo data on an
+loads a bilingual (English/Arabic) operational dataset — or realistic synthetic demo data on an
 empty install — a Redis-backed job scheduler, and a React dashboard covering sixteen operational
 areas that a company can populate with its own records.
 
