@@ -306,6 +306,9 @@ construction-ai-platform/
 
 ## Documentation
 
+- [docs/Construction_AI_Platform_Overview.pptx](docs/Construction_AI_Platform_Overview.pptx) — a
+  13-slide visual overview of the platform with real screenshots (downloads; GitHub does not preview
+  PowerPoint files). The fastest way to understand what this is without reading code.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system design, data flow, the AI subsystem, and the
   reasoning behind the main decisions.
 - [docs/SECURITY.md](docs/SECURITY.md) — authentication, the RBAC matrix, rate limiting, audit,
