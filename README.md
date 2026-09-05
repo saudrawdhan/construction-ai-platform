@@ -1,5 +1,7 @@
 # Construction Operations Intelligence Platform
 
+[![CI](https://github.com/saudrawdhan/construction-ai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/saudrawdhan/construction-ai-platform/actions/workflows/ci.yml)
+
 A construction company runs on documents: emails, meeting minutes, daily site reports, purchase
 requests, RFIs, non-conformance reports, and claims. Most of it never gets read twice. Decisions
 get made, forgotten, and re-litigated; a supplier's poor delivery history sits invisible in a
@@ -53,44 +55,42 @@ project returns that project's risk register directly, because a risk record des
 without ever using the word, and keyword matching alone could never find it.
 
 **Autonomous agent.** Given a goal in plain language, the agent plans a sequence of tool calls,
-executes them, and returns a grounded answer alongside its full reasoning trajectory. It is a
-single reasoning layer, not six separate mini-agents: its tool set spans all six AI workflows plus
-retrieval and direct lookups over projects, claims, change orders, safety events, project risks,
-and open action items, so the same
-agent that assesses a supplier's risk can also summarize a meeting, analyze a site report, or total
-a project's open claims. A direct question naming one of these read-only lookups is guaranteed to
-call it — the same principle that already guarantees an explicit `remember` instruction fires —
-rather than left to hope, since a live test found the model can otherwise answer confidently from
-memory alone and miss real records entirely, once even reporting no recent safety incidents when a
-real high-severity one was on file. The totals and lists these tools return are relayed to the user
-exactly as computed, never re-summarized by the model: a separate live test found free-text
-narration inventing a different figure for one line item while silently dropping another from its
-own sum, so this class of answer bypasses narration and returns the computed result directly. Every
-run consults enterprise memory first, and a follow-up goal
-stays in the same conversation — a project mentioned in an earlier turn carries forward
-automatically, so "what about its delivery history" resolves against what was actually just
-discussed instead of being planned from nothing. It turns a solved task into a reusable skill — a
-named, parameterized sequence of tool calls, stored as data rather than generated code, that it
-reuses on similar goals and refines from its success rate. Matching a goal to a skill is hybrid:
-exact keyword overlap is tried first, and an embedding-similarity comparison (calibrated against
-real measured scores, not a guessed threshold) catches genuine paraphrases keyword matching alone
-would miss — "how risky is supplier 12" reuses the same skill built from "assess the risk of
-supplier 3." An explicit topic change in the goal itself ("one more thing, unrelated to the
-RFIs...") skips skill matching for that turn, since a live test found a skill's own keyword
-fingerprint can match a phrase that only mentions its topic to say it is unrelated — plain keyword
-overlap cannot tell the two apart. An admin can deprecate or hard-delete a skill directly from the
-Agent page when one misbehaves; a skill with prior run history can only be deprecated, never deleted
-outright, keeping its trajectory in the audit trail. Each tool carries the same role restriction as its direct API
-endpoint, checked on every use, including when a stored skill is replayed by a different user —
-reaching every service never bypasses that service's own governance. Content retrieved from memory,
-documents, or past sessions is treated as data, never as instructions: text that resembles an
-embedded override or an unverified claim about a waived approval is flagged before it ever reaches
-the model, so a poisoned record cannot talk the agent into bad advice the way an unguarded prompt
-would let it. Every step is recorded and auditable, and no external agent framework is used. What
-the agent does not do, deliberately: it does not build a behavioral or personality profile of the
-person asking — it recalls this user's own recent work ahead of the wider organizational record,
-but it has no concept of an individual's traits or preferences, which is the appropriate boundary
-for a shared operational tool used by many employees under one audit trail.
+executes them, and returns a grounded answer alongside its full reasoning trajectory. It is a single
+reasoning layer, not six separate mini-agents: its tool set spans all six AI workflows plus retrieval
+and direct lookups over projects, claims, change orders, safety events, project risks, and open
+action items — so the same agent that assesses a supplier's risk can also summarize a meeting,
+analyze a site report, or total a project's open claims. No external agent framework is used; the
+loop, retrieval, and memory are written directly, so every step is auditable.
+
+- **Real lookups are guaranteed, not hoped for.** A direct question naming one of the read-only
+  lookups always calls it — the same principle that guarantees an explicit `remember` instruction
+  fires. A live test found the model could otherwise answer confidently from memory alone and miss
+  real records entirely, once reporting no recent safety incidents while a real high-severity one was
+  on file.
+- **Computed figures bypass narration.** Totals and lists are relayed exactly as computed, never
+  re-summarized. A separate live test caught free-text narration inventing a different figure for one
+  line item while silently dropping another from its own sum.
+- **Conversations carry context.** Every run consults enterprise memory first, and a follow-up stays
+  in the same conversation — a project mentioned earlier carries forward, so "what about its delivery
+  history" resolves against what was just discussed rather than being planned from nothing.
+- **Solved tasks become reusable skills** — a named, parameterized sequence of tool calls stored as
+  data, not generated code, refined by its own success rate. Matching is hybrid: exact keyword overlap
+  first, then embedding similarity (calibrated against real measured scores, not a guessed threshold)
+  to catch paraphrases — "how risky is supplier 12" reuses the skill built from "assess the risk of
+  supplier 3." An explicit topic change ("one more thing, unrelated to the RFIs…") skips skill
+  matching, because a live test showed a skill's own keyword fingerprint can match a phrase that only
+  mentions its topic in order to exclude it.
+- **Skills stay governed.** An admin can deprecate or hard-delete a misbehaving skill from the Agent
+  page, but one with prior run history can only be deprecated — never deleted outright — so its
+  trajectory stays in the audit trail. Each tool carries the same role restriction as its direct API
+  endpoint, checked on every use, including when a stored skill is replayed by a different user.
+- **Retrieved content is data, never instructions.** Text resembling an embedded override or an
+  unverified claim about a waived approval is flagged before it reaches the model, so a poisoned
+  record cannot talk the agent into bad advice.
+- **What it deliberately does not do:** build a behavioral or personality profile of the person
+  asking. It surfaces this user's own recent work ahead of the wider organizational record, but has
+  no concept of individual traits or preferences — the right boundary for a shared operational tool
+  running under one audit trail.
 
 **Governance.** JWT authentication, seven-role RBAC, an audit log written on every AI call, and a
 human-in-the-loop approval workflow: high-risk actions become approval requests that a manager
@@ -141,7 +141,7 @@ can adopt it and run its own operation:
 | Backend API | FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), Alembic |
 | Database | PostgreSQL 16 + pgvector (41 tables) |
 | Cache / scheduler | Redis 7 + arq worker |
-| LLM | Provider-agnostic client; Google Gemini (`gemini-2.5-flash`) by default, deterministic mock adapter for tests and offline dev |
+| LLM | Provider-agnostic OpenAI-compatible client, swapped by one env variable: Google Gemini (`gemini-2.5-flash`) by default, Groq, OpenAI, local open-weights via Ollama, or a deterministic mock for tests and offline dev |
 | Embeddings / RAG | `intfloat/multilingual-e5-large` (1024-dim, ONNX via fastembed — no PyTorch) + hybrid pgvector-cosine and Postgres full-text search fused with Reciprocal Rank Fusion |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS |
 | Security | JWT auth, RBAC, per-route rate limiting, security headers, audit logging, approval gate |
@@ -164,10 +164,10 @@ Two ideas run through the whole AI layer:
 
 2. **Grounding and provider independence.** Every workflow and copilot answer carries the sources
    and memory records it used. The copilot refuses when it has no evidence. The LLM sits behind a
-   small `LLMClient` protocol with two implementations: a real Gemini client (with retry and
-   backoff) and a deterministic mock. Tests, local development, and demos default to the mock, so
-   they are fully offline and spend zero API quota; switching to a real provider is one environment
-   variable.
+   small `LLMClient` protocol with two implementations: one OpenAI-compatible client (with retry and
+   backoff) that serves Gemini, Groq, OpenAI, and local open-weights models through Ollama, and a
+   deterministic mock. Tests, local development, and demos default to the mock, so they are fully
+   offline and spend zero API quota; switching providers is one environment variable.
 
 ## Prerequisites
 

@@ -32,7 +32,7 @@ Everything sensitive comes from the environment, never the image:
 | `REDIS_URL` | Redis DSN |
 | `JWT_SECRET` | token signing key — **enforced**: outside `ENVIRONMENT=development` the app refuses to start unless this is set to a unique value of 32+ characters |
 | `POSTGRES_PASSWORD` | database password (required, no default) |
-| `LLM_PROVIDER` | live AI engine: `gemini` or `groq` (hosted, OpenAI-compatible), `local` (self-hosted Ollama), or `mock` (offline, deterministic) |
+| `LLM_PROVIDER` | live AI engine: `gemini`, `groq`, or `openai` (hosted, OpenAI-compatible), `local` (self-hosted Ollama), or `mock` (offline, deterministic) |
 | `LLM_API_KEY` | provider key, needed only for a hosted provider (`gemini`/`groq`); not used by `local` or `mock` |
 | `CORS_ORIGINS` | comma-separated allow-list of frontend origins |
 
